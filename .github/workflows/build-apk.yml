@@ -46,17 +46,6 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "빌드 버전: $NAME (code ${GITHUB_RUN_NUMBER})"
 
-      # B안: 키스토어를 저장소에 두지 않는 경우.
-      # `base64 -w0 keystore/kidschedule.p12` 결과를 Settings → Secrets → Actions 에
-      # KEYSTORE_B64 로 넣고, 저장소에서는 keystore/ 를 지우면 됩니다.
-      # A안(커밋)이면 시크릿이 없으므로 이 단계는 그냥 건너뜁니다.
-      - name: 키스토어 복원 (시크릿이 있을 때만)
-        if: ${{ secrets.KEYSTORE_B64 != '' }}
-        run: |
-          mkdir -p keystore
-          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > keystore/kidschedule.p12
-          echo "키스토어 복원됨 ($(stat -c%s keystore/kidschedule.p12) bytes)"
-
       - name: 웹 자산을 www/ 로
         run: npm run build
 
@@ -67,8 +56,6 @@ jobs:
         env:
           APP_VERSION_NAME: ${{ steps.ver.outputs.name }}
           APP_VERSION_CODE: ${{ github.run_number }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
         run: node scripts/patch-android.mjs
 
       - name: 플러그인 동기화

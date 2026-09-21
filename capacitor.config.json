@@ -1,0 +1,14 @@
+{
+  "appId": "io.github.xipaul.kidschedule",
+  "appName": "오늘 뭐 하지",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#16324F"
+    }
+  }
+}

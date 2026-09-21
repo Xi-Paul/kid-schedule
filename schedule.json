@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "student": "우리 아이",
+  "notifyBeforeMin": 10,
+  "weekly": [
+    { "id": "wake",    "day": 1, "start": "07:20", "end": "08:00", "limitMin": 40, "title": "일어나서 준비", "kind": "life",    "place": "" },
+    { "id": "school1", "day": 1, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
+    { "id": "taekwon", "day": 1, "start": "16:00", "end": "17:00", "title": "태권도",      "kind": "sport",   "place": "상가 2층" },
+    { "id": "hw1",     "day": 1, "start": "19:00", "end": "19:40", "limitMin": 40, "title": "숙제", "kind": "study", "place": "" },
+
+    { "id": "school2", "day": 2, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
+    { "id": "piano",   "day": 2, "start": "15:30", "end": "16:20", "title": "피아노",      "kind": "academy", "place": "" },
+    { "id": "hw2",     "day": 2, "start": "19:00", "end": "19:40", "limitMin": 40, "title": "숙제", "kind": "study", "place": "" },
+
+    { "id": "school3", "day": 3, "start": "08:30", "end": "12:20", "track": false, "title": "학교",        "kind": "school",  "place": "" },
+    { "id": "taekwon2","day": 3, "start": "16:00", "end": "17:00", "title": "태권도",      "kind": "sport",   "place": "상가 2층" },
+
+    { "id": "school4", "day": 4, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
+    { "id": "math",    "day": 4, "start": "17:00", "end": "18:30", "title": "수학 학원",   "kind": "academy", "place": "" },
+
+    { "id": "school5", "day": 5, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
+    { "id": "free",    "day": 5, "start": "16:00", "end": "18:00", "track": false, "title": "친구랑 놀기", "kind": "play",    "place": "" },
+
+    { "id": "read",    "day": 6, "start": "10:00", "end": "10:40", "limitMin": 30, "title": "책 읽기", "kind": "study", "place": "" },
+    { "id": "bed1",    "day": 0, "start": "21:00", "end": "",      "limitMin": 30, "title": "잘 준비", "kind": "life",  "place": "" }
+  ],
+  "once": []
+}

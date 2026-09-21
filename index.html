@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>오늘 뭐 하지 — 주간 스케줄</title>
+<meta name="theme-color" content="#16324F">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="오늘 뭐 하지">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>오늘 뭐 하지</h1>
+    <div class="today" id="todayLabel"></div>
+  </div>
+  <div class="hero idle" id="hero">
+    <p class="what" id="heroWhat">불러오는 중</p>
+    <p class="when" id="heroWhen"></p>
+  </div>
+  <div class="syncline" id="syncline" data-s="idle">
+    <span class="dot"></span><span id="syncText">시작하는 중</span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true"  data-tab="today">오늘</button>
+  <button role="tab" aria-selected="false" data-tab="week">이번 주</button>
+  <button role="tab" aria-selected="false" data-tab="rec">기록</button>
+  <button role="tab" aria-selected="false" data-tab="edit">일정</button>
+  <button role="tab" aria-selected="false" data-tab="set">설정</button>
+</nav>
+
+<main>
+  <!-- ===== 오늘 ===== -->
+  <section id="tab-today">
+    <div class="notice" id="notifyBar">
+      <span id="notifyText">일정 시간에 알림을 받으려면 켜 주세요.</span>
+      <button class="btn small" id="notifyBtn">알림 켜기</button>
+    </div>
+    <ul class="tl" id="timeline"></ul>
+  </section>
+
+  <!-- ===== 이번 주 ===== -->
+  <section id="tab-week" class="hidden">
+    <div class="week" id="weekGrid"></div>
+  </section>
+
+  <!-- ===== 기록 ===== -->
+  <section id="tab-rec" class="hidden">
+    <div class="btns" style="margin-bottom:14px">
+      <button class="btn small" id="recReload">다시 불러오기</button>
+    </div>
+    <div id="recBody"></div>
+  </section>
+
+  <!-- ===== 일정 편집 (부모) ===== -->
+  <section id="tab-edit" class="hidden">
+    <div class="notice warn" id="editGate">
+      설정 탭에서 역할을 <b style="margin:0 4px">부모</b>로 바꾸면 일정을 편집할 수 있습니다.
+    </div>
+
+    <div id="editBody" class="hidden">
+      <div class="panel">
+        <h2>일정 추가</h2>
+        <p class="hint">제한시간을 비우면 종료−시작 시간을 제한시간으로 씁니다. 끝 시간도 없으면 60분입니다.</p>
+        <form id="addForm">
+          <div class="row two">
+            <div><label for="fTitle">무엇을</label><input type="text" id="fTitle" placeholder="예: 숙제" required></div>
+            <div><label for="fKind">종류</label><select id="fKind"></select></div>
+          </div>
+          <div class="row three">
+            <div><label for="fStart">시작</label><input type="time" id="fStart" value="19:00" required></div>
+            <div><label for="fEnd">끝 (선택)</label><input type="time" id="fEnd"></div>
+            <div><label for="fLimit">제한시간 (분, 선택)</label><input type="number" id="fLimit" min="1" max="600" placeholder="예: 40"></div>
+          </div>
+          <div class="row two">
+            <div><label for="fPlace">장소 (선택)</label><input type="text" id="fPlace" placeholder="예: 학교 앞"></div>
+            <div><label for="fDate">하루만 — 날짜</label><input type="date" id="fDate"></div>
+          </div>
+          <div class="row">
+            <div><label>매주 반복할 요일</label><div class="dows" id="fDows"></div></div>
+          </div>
+          <div class="row">
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink)">
+              <input type="checkbox" id="fTrack" checked style="width:auto">
+              진행 체크 대상 — 아이가 시작·완료를 누르고 제한시간을 잽니다
+            </label>
+          </div>
+          <button class="btn primary" type="submit" style="width:100%">일정 추가</button>
+        </form>
+      </div>
+
+      <div class="panel"><h2>매주 반복 일정</h2><ul class="list" id="weeklyList"></ul></div>
+      <div class="panel"><h2>하루만 있는 일정</h2><ul class="list" id="onceList"></ul></div>
+
+      <div class="panel">
+        <h2>기본값</h2>
+        <div class="row two">
+          <div><label for="fName">아이 이름</label><input type="text" id="fName"></div>
+          <div><label for="fBefore">몇 분 전에 알릴까</label><input type="number" id="fBefore" min="0" max="120" step="5"></div>
+        </div>
+        <div class="row two">
+          <div><label for="fWinBefore">체크 허용 — 시작 몇 분 전부터</label><input type="number" id="fWinBefore" min="0" max="240"></div>
+          <div><label for="fWinAfter">체크 허용 — 종료 몇 분 후까지</label><input type="number" id="fWinAfter" min="0" max="240"></div>
+        </div>
+        <p class="hint">체크 허용 시간창 밖에서는 아이가 완료를 누를 수 없습니다. 몰아서 체크하는 걸 막습니다.
+          이 값은 이 기기에만 저장되므로, 모두에게 적용하려면 저장소의 <code>config.json</code> 을 고치세요.</p>
+      </div>
+
+      <div class="panel">
+        <h2>저장소에 반영</h2>
+        <p class="hint">위에서 고친 내용은 아직 이 기기에만 있습니다. 저장을 눌러야 <code>schedule.json</code> 으로 커밋됩니다.</p>
+        <div class="btns">
+          <button class="btn primary" id="saveSched">저장소에 저장</button>
+          <button class="btn" id="reloadSched">저장소에서 다시 불러오기</button>
+          <button class="btn" id="expJson">schedule.json 내려받기</button>
+          <button class="btn" id="expIcs">캘린더 파일 내려받기</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 설정 ===== -->
+  <section id="tab-set" class="hidden">
+    <div class="panel">
+      <h2>저장소 연결</h2>
+      <p class="hint">토큰은 이 기기의 브라우저에만 저장되고 저장소에는 올라가지 않습니다.
+        GitHub → Settings → Developer settings → Fine-grained tokens 에서 <b>이 저장소만</b> 선택하고
+        Repository permissions → Contents 를 <b>Read and write</b> 로 주세요.</p>
+      <div class="row two">
+        <div><label for="sOwner">소유자</label><input type="text" id="sOwner" placeholder="Xi-Paul"></div>
+        <div><label for="sRepo">일정 저장소</label><input type="text" id="sRepo" placeholder="kid-schedule"></div>
+      </div>
+      <div class="row two">
+        <div><label for="sBranch">브랜치</label><input type="text" id="sBranch" placeholder="main"></div>
+        <div><label for="sStatusRepo">기록 저장소 (선택)</label><input type="text" id="sStatusRepo" placeholder="kid-schedule-status"></div>
+      </div>
+      <div class="row two">
+        <div>
+          <label for="sRole">역할</label>
+          <select id="sRole">
+            <option value="viewer">보기만</option>
+            <option value="child">아이 — 체크만</option>
+            <option value="parent">부모 — 편집까지</option>
+          </select>
+        </div>
+        <div><label for="sToken">토큰</label><input type="password" id="sToken" placeholder="github_pat_..." autocomplete="off"></div>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="saveConn">저장하고 연결 확인</button>
+        <button class="btn" id="syncNow">지금 동기화</button>
+        <button class="btn danger" id="clearToken">토큰 지우기</button>
+      </div>
+      <p class="hint" style="margin:14px 0 0" id="rateInfo"></p>
+    </div>
+
+    <div class="panel">
+      <h2>역할이 실제로 막아주는 것</h2>
+      <p class="hint" style="margin:0">
+        역할은 이 앱 화면에서만 구분됩니다. GitHub 토큰은 파일 경로별로 권한을 나눌 수 없고,
+        최소 단위가 저장소입니다. 그래서 아이 기기 토큰이 새면 같은 저장소의 일정도 바뀔 수 있습니다.
+        진짜로 분리하려면 기록 전용 저장소를 따로 만들고, 아이 토큰은 그 저장소에만 권한을 주세요.
+        위의 <b>기록 저장소</b> 칸이 그 용도입니다.
+      </p>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="./github.js"></script>
+<script src="./native.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

@@ -23,6 +23,7 @@
     <h1>오늘 뭐 하지</h1>
     <div class="today" id="todayLabel"></div>
   </div>
+  <div class="kidbar hidden" id="kidBar"></div>
   <div class="hero idle" id="hero">
     <p class="what" id="heroWhat">불러오는 중</p>
     <p class="when" id="heroWhen"></p>
@@ -70,6 +71,18 @@
     </div>
 
     <div id="editBody" class="hidden">
+      <div class="panel">
+        <h2>아이</h2>
+        <p class="hint">지금 편집 중인 아이: <b id="kidLabel"></b> — 위의 이름 버튼으로 바꿉니다.</p>
+        <div class="row two">
+          <div><label for="fName">이름</label><input type="text" id="fName"></div>
+          <div style="display:flex;align-items:flex-end;gap:8px">
+            <button class="btn" type="button" id="kidAdd" style="flex:1">아이 추가</button>
+            <button class="btn danger" type="button" id="kidDel">이 아이 삭제</button>
+          </div>
+        </div>
+      </div>
+
       <div class="panel" id="addPanel">
         <h2 id="formTitle">일정 추가</h2>
         <p class="hint" id="formHint">제한시간을 비우면 종료−시작 시간을 제한시간으로 씁니다. 끝 시간도 없으면 60분입니다.
@@ -136,9 +149,10 @@
 
       <div class="panel">
         <h2>기본값</h2>
+        <p class="hint">아래 값은 아이 구분 없이 전체에 적용됩니다.</p>
         <div class="row two">
-          <div><label for="fName">아이 이름</label><input type="text" id="fName"></div>
           <div><label for="fBefore">몇 분 전에 알릴까</label><input type="number" id="fBefore" min="0" max="120" step="5"></div>
+          <div></div>
         </div>
         <div class="row two">
           <div><label for="fWinBefore">체크 허용 — 시작 몇 분 전부터</label><input type="number" id="fWinBefore" min="0" max="240"></div>

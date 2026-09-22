@@ -142,38 +142,47 @@ GitHub → Settings → Developer settings → Personal access tokens → **Fine
 
 ```jsonc
 {
-  "version": 2,
-  "student": "아이 이름",
-  "notifyBeforeMin": 10,
+  "version": 3,
+  "kids": [                          // 아이 목록. 6명까지
+    { "id": "kid1", "name": "첫째", "emoji": "🐯", "color": "#3B82F6" },
+    { "id": "kid2", "name": "둘째", "emoji": "🐰", "color": "#EC4899" }
+  ],
+  "notifyBeforeMin": 10,             // 아이 구분 없이 공통
   "weekly": [
     {
-      "id": "hw1",                 // 저장소 안에서 겹치지 않게
-      "day": 1,                    // 0=일 1=월 … 6=토
+      "id": "hw1",                   // 저장소 안에서 겹치지 않게
+      "kid": "kid1",                 // 누구 일정인지
+      "day": 1,                      // 0=일 1=월 … 6=토
       "start": "19:00",
       "end": "19:40",
-      "limitMin": 40,              // 제한시간. 없으면 끝−시작
+      "limitMin": 40,                // 제한시간. 없으면 끝−시작
       "title": "숙제",
-      "kind": "study",             // school academy study sport life play
+      "kind": "study",               // school academy study sport life play
       "place": "",
-      "track": true,               // false면 진행 체크 대상 아님
-      "off": ["2026-10-06"]        // 이 날짜는 건너뜀
+      "track": true,                 // false면 진행 체크 대상 아님
+      "onHoliday": "skip",           // "keep" 이면 공휴일에도 진행
+      "geo": { "lat": 37.566, "lng": 126.978, "radius": 300 },   // 없으면 장소 확인 안 함
+      "off": ["2026-10-06"]          // 이 날짜는 건너뜀
     }
   ],
   "once": [
-    { "id": "dent", "date": "2026-09-24", "start": "14:00", "end": "15:00",
+    { "id": "dent", "kid": "kid2", "date": "2026-09-24", "start": "14:00", "end": "15:00",
       "limitMin": 60, "title": "치과", "kind": "life" }
   ]
 }
 ```
 
-### `status/2026-09-21.json`
+예전 형식(`student` 하나, `kid` 없음)을 그대로 두어도 앱이 첫 실행 때 아이 한 명으로 옮깁니다.
+
+### `status/<아이 id>/2026-09-21.json`
 
 앱이 자동으로 만듭니다. 사람이 읽을 수 있는 형태로 커밋됩니다.
 
 ```jsonc
 {
   "date": "2026-09-21",
-  "student": "우리 아이",
+  "kid": "kid1",
+  "name": "첫째",
   "updatedAt": "2026-09-21T10:50:00.000Z",
   "items": {
     "hw1": {
@@ -196,6 +205,7 @@ GitHub Contents API(PUT)는 대상 파일의 blob `sha` 를 요구하고, 최신
 그래서 모든 쓰기는 **읽기 → 수정 → sha 동봉 쓰기** 이고, 409면 다시 읽어 최대 4회 재시도합니다.
 아이 기기와 부모 기기가 같은 날짜 파일을 동시에 건드려도, 나중 쓰기가 앞의 기록을 **덮지 않고 합칩니다.**
 
+- 아이마다 파일이 다릅니다(`status/<아이 id>/날짜.json`). 두 아이가 같은 시각에 체크해도 서로 충돌하지 않습니다.
 - 커밋은 조작마다 하지 않고 **2.5초 디바운스**로 묶습니다. 하루 대략 10건 안팎입니다.
 - 앱이 열려 있으면 60초마다 원격을 다시 읽어 다른 기기의 체크를 반영합니다.
   아직 못 보낸 로컬 변경은 그대로 지킵니다.

@@ -1,5 +1,5 @@
 /* 앱 껍데기만 캐시합니다. 일정과 진행 기록은 GitHub API로 직접 받으므로 캐시하지 않습니다. */
-const CACHE = "kidsched-v2";
+const CACHE = "kidsched-v3";
 const SHELL = ["./", "./index.html", "./styles.css", "./github.js", "./app.js",
                "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 

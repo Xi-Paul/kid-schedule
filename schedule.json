@@ -1,28 +1,251 @@
 {
-  "version": 2,
-  "student": "우리 아이",
+  "version": 3,
+  "kids": [
+    {
+      "id": "kid1",
+      "name": "첫째",
+      "emoji": "🐯",
+      "color": "#3B82F6"
+    },
+    {
+      "id": "kid2",
+      "name": "둘째",
+      "emoji": "🐰",
+      "color": "#EC4899"
+    }
+  ],
   "notifyBeforeMin": 10,
   "weekly": [
-    { "id": "wake",    "day": 1, "start": "07:20", "end": "08:00", "limitMin": 40, "onHoliday": "keep", "title": "일어나서 준비", "kind": "life",    "place": "" },
-    { "id": "school1", "day": 1, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
-    { "id": "taekwon", "day": 1, "start": "16:00", "end": "17:00", "title": "태권도",      "kind": "sport",   "place": "상가 2층" },
-    { "id": "hw1",     "day": 1, "start": "19:00", "end": "19:40", "limitMin": 40, "title": "숙제", "kind": "study", "place": "" },
-
-    { "id": "school2", "day": 2, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
-    { "id": "piano",   "day": 2, "start": "15:30", "end": "16:20", "title": "피아노",      "kind": "academy", "place": "" },
-    { "id": "hw2",     "day": 2, "start": "19:00", "end": "19:40", "limitMin": 40, "title": "숙제", "kind": "study", "place": "" },
-
-    { "id": "school3", "day": 3, "start": "08:30", "end": "12:20", "track": false, "title": "학교",        "kind": "school",  "place": "" },
-    { "id": "taekwon2","day": 3, "start": "16:00", "end": "17:00", "title": "태권도",      "kind": "sport",   "place": "상가 2층" },
-
-    { "id": "school4", "day": 4, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
-    { "id": "math",    "day": 4, "start": "17:00", "end": "18:30", "title": "수학 학원",   "kind": "academy", "place": "" },
-
-    { "id": "school5", "day": 5, "start": "08:30", "end": "13:10", "track": false, "title": "학교",        "kind": "school",  "place": "" },
-    { "id": "free",    "day": 5, "start": "16:00", "end": "18:00", "track": false, "title": "친구랑 놀기", "kind": "play",    "place": "" },
-
-    { "id": "read",    "day": 6, "start": "10:00", "end": "10:40", "limitMin": 30, "title": "책 읽기", "kind": "study", "place": "" },
-    { "id": "bed1",    "day": 0, "start": "21:00", "end": "",      "limitMin": 30, "onHoliday": "keep", "title": "잘 준비", "kind": "life",  "place": "" }
+    {
+      "id": "wake",
+      "day": 1,
+      "start": "07:20",
+      "end": "08:00",
+      "limitMin": 40,
+      "onHoliday": "keep",
+      "title": "일어나서 준비",
+      "kind": "life",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "school1",
+      "day": 1,
+      "start": "08:30",
+      "end": "13:10",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "taekwon",
+      "day": 1,
+      "start": "16:00",
+      "end": "17:00",
+      "title": "태권도",
+      "kind": "sport",
+      "place": "상가 2층",
+      "kid": "kid1"
+    },
+    {
+      "id": "hw1",
+      "day": 1,
+      "start": "19:00",
+      "end": "19:40",
+      "limitMin": 40,
+      "title": "숙제",
+      "kind": "study",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "school2",
+      "day": 2,
+      "start": "08:30",
+      "end": "13:10",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "piano",
+      "day": 2,
+      "start": "15:30",
+      "end": "16:20",
+      "title": "피아노",
+      "kind": "academy",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "hw2",
+      "day": 2,
+      "start": "19:00",
+      "end": "19:40",
+      "limitMin": 40,
+      "title": "숙제",
+      "kind": "study",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "school3",
+      "day": 3,
+      "start": "08:30",
+      "end": "12:20",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "taekwon2",
+      "day": 3,
+      "start": "16:00",
+      "end": "17:00",
+      "title": "태권도",
+      "kind": "sport",
+      "place": "상가 2층",
+      "kid": "kid1"
+    },
+    {
+      "id": "school4",
+      "day": 4,
+      "start": "08:30",
+      "end": "13:10",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "math",
+      "day": 4,
+      "start": "17:00",
+      "end": "18:30",
+      "title": "수학 학원",
+      "kind": "academy",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "school5",
+      "day": 5,
+      "start": "08:30",
+      "end": "13:10",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "free",
+      "day": 5,
+      "start": "16:00",
+      "end": "18:00",
+      "track": false,
+      "title": "친구랑 놀기",
+      "kind": "play",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "read",
+      "day": 6,
+      "start": "10:00",
+      "end": "10:40",
+      "limitMin": 30,
+      "title": "책 읽기",
+      "kind": "study",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "bed1",
+      "day": 0,
+      "start": "21:00",
+      "end": "",
+      "limitMin": 30,
+      "onHoliday": "keep",
+      "title": "잘 준비",
+      "kind": "life",
+      "place": "",
+      "kid": "kid1"
+    },
+    {
+      "id": "k2school1",
+      "kid": "kid2",
+      "day": 1,
+      "start": "08:40",
+      "end": "12:30",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": ""
+    },
+    {
+      "id": "k2art",
+      "kid": "kid2",
+      "day": 1,
+      "start": "15:00",
+      "end": "16:00",
+      "limitMin": 60,
+      "title": "미술",
+      "kind": "academy",
+      "place": ""
+    },
+    {
+      "id": "k2school2",
+      "kid": "kid2",
+      "day": 2,
+      "start": "08:40",
+      "end": "12:30",
+      "track": false,
+      "title": "학교",
+      "kind": "school",
+      "place": ""
+    },
+    {
+      "id": "k2swim",
+      "kid": "kid2",
+      "day": 2,
+      "start": "16:30",
+      "end": "17:20",
+      "limitMin": 50,
+      "title": "수영",
+      "kind": "sport",
+      "place": "시민체육관"
+    },
+    {
+      "id": "k2hw",
+      "kid": "kid2",
+      "day": 2,
+      "start": "19:00",
+      "end": "19:30",
+      "limitMin": 30,
+      "title": "숙제",
+      "kind": "study",
+      "place": ""
+    },
+    {
+      "id": "k2bed",
+      "kid": "kid2",
+      "day": 0,
+      "start": "20:30",
+      "end": "",
+      "limitMin": 30,
+      "onHoliday": "keep",
+      "title": "잘 준비",
+      "kind": "life",
+      "place": ""
+    }
   ],
   "once": []
 }

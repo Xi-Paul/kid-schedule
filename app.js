@@ -45,6 +45,9 @@ let flushTimer = null;
 let notifyOn = false;
 let firedMap = {};
 let recCache = null;
+let holidays = {};          // "YYYY-MM-DD" → 공휴일 이름
+let editing = null;         // 수정 중인 일정 {bucket, id} — null 이면 새로 추가하는 중
+let formGeo = null;         // 입력 칸에 올려둔 장소 {lat, lng, radius}
 
 const role = () => (conn && conn.role) || "viewer";
 const isParent = () => role() === "parent";
@@ -98,6 +101,32 @@ function windowOf(e) {
   const en = e.end ? mins(e.end) : s + limitOf(e);
   return { startM: s, endM: en, openM: s - cfg.check.beforeMin, closeM: en + cfg.check.afterMin };
 }
+/** 일정이 차지하는 시간대 [시작, 끝). 끝이 없으면 제한시간만큼으로 봅니다. */
+function spanOf(e) {
+  const s0 = mins(e.start);
+  return [s0, e.end ? mins(e.end) : s0 + limitOf(e)];
+}
+/**
+ * 같은 날 안에서 시간이 겹치는 일정을 찾습니다.
+ * 겹침 기준은 [시작, 끝) — 앞 일정이 끝나는 시각에 다음이 시작하는 건 겹침이 아닙니다.
+ * @returns {Map<string, string[]>} 일정 id → 겹치는 상대 이름들
+ */
+function overlapMap(list) {
+  const m = new Map();
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const [as, ae] = spanOf(list[i]), [bs, be] = spanOf(list[j]);
+      if (as < be && bs < ae) {
+        if (!m.has(list[i].id)) m.set(list[i].id, []);
+        if (!m.has(list[j].id)) m.set(list[j].id, []);
+        m.get(list[i].id).push(list[j].title);
+        m.get(list[j].id).push(list[i].title);
+      }
+    }
+  }
+  return m;
+}
+
 /** 저장된 기록 + 현재 시각으로 상태를 판정 */
 function stateOf(e, rec, nm) {
   if (rec && (rec.state === "done" || rec.state === "over")) return rec.state;
@@ -122,7 +151,11 @@ function normalize(d) {
     id: e.id || uid(), start: e.start, end: e.end || "",
     limitMin: (e.limitMin === "" || e.limitMin == null) ? null : Number(e.limitMin),
     title: e.title || "", kind: e.kind || "school", place: e.place || "",
-    track: e.track === false ? false : true          // false = 진행 체크 대상이 아님(학교 등)
+    track: e.track === false ? false : true,         // false = 진행 체크 대상이 아님(학교 등)
+    onHoliday: e.onHoliday === "keep" ? "keep" : "skip",  // 공휴일에 유지할지 쉴지
+    geo: (e.geo && e.geo.lat != null && e.geo.lng != null)
+      ? { lat: Number(e.geo.lat), lng: Number(e.geo.lng), radius: Number(e.geo.radius) || 300 }
+      : null
   });
   o.weekly = (o.weekly || []).map(e => Object.assign(fix(e), { day: Number(e.day), off: e.off || [] }))
     .filter(e => e.start && e.title && e.day >= 0 && e.day <= 6);
@@ -131,11 +164,104 @@ function normalize(d) {
   o.notifyBeforeMin = Number(o.notifyBeforeMin ?? 10);
   return o;
 }
+/* ===================== 장소 확인 ===================== */
+/*
+ * 아이가 시작·완료를 누를 때 "등록된 장소 근처인가"만 기기에서 판정합니다.
+ * 좌표는 절대 기록하지 않습니다. 저장되는 값은 here / away / unknown 셋 중 하나뿐입니다.
+ * 장소 좌표는 schedule.json 에 소수점 3자리(약 110m 격자)로만 넣습니다.
+ */
+const LS_GEO = "ks2.geo.v1";
+const geoOn = () => !!readLS(LS_GEO, false);
+
+/** 현재 위치 한 번 읽기. 네이티브면 Capacitor, 아니면 브라우저 API. */
+async function readPosition(timeout = 8000) {
+  const Cap = window.Capacitor;
+  if (Cap && Cap.isNativePlatform && Cap.isNativePlatform() && Cap.Plugins && Cap.Plugins.Geolocation) {
+    const p = await Cap.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout });
+    return { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+  }
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error("이 기기는 위치를 지원하지 않습니다"));
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
+      e => rej(e),
+      { enableHighAccuracy: false, timeout, maximumAge: 30000 });
+  });
+}
+
+/** 두 지점 사이 거리(m) — 하버사인 */
+function distM(a, b) {
+  const R = 6371000, rad = d => d * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 +
+            Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * 등록된 장소 근처인지 판정합니다.
+ * @returns "here" | "away" | "unknown" | null(검사 안 함)
+ */
+async function checkSpot(e) {
+  if (!e.geo || !geoOn()) return null;
+  try {
+    const pos = await readPosition();
+    const allow = (e.geo.radius || 300) + Math.min(pos.acc || 0, 200);  // GPS 오차만큼 넉넉히
+    return distM(pos, e.geo) <= allow ? "here" : "away";
+    // pos 는 여기서 버려집니다. 어디에도 저장하지 않습니다.
+  } catch (err) {
+    return "unknown";
+  }
+}
+const SPOT_LABEL = { here: "📍 장소 확인", away: "📍 다른 곳", unknown: "📍 확인 못 함" };
+
+/* ===================== 공휴일 ===================== */
+/**
+ * holidays.json 을 읽습니다. 연도별로 묶여 있으므로 한 장으로 펼칩니다.
+ * 음력 기반(설날·추석·부처님오신날)과 대체공휴일은 매년 날짜가 달라지므로
+ * 프로그램으로 계산하지 않고 데이터로 관리합니다. 임시공휴일도 여기에 넣으면 바로 반영됩니다.
+ */
+async function loadHolidays() {
+  try {
+    const r = await fetch("./holidays.json", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const raw = await r.json();
+    const flat = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k.startsWith("_") || typeof v !== "object") continue;   // _note 같은 설명 줄은 건너뜀
+      Object.assign(flat, v);
+    }
+    holidays = flat;
+  } catch (e) { holidays = {}; }
+}
+/** 그날이 공휴일이면 이름, 아니면 null */
+const holidayOn = key => holidays[key] || null;
+/** 그 해 데이터가 하나도 없으면 true — 사용자에게 추가하라고 알려야 합니다 */
+function holidayYearMissing(year) {
+  return !Object.keys(holidays).some(k => k.startsWith(year + "-"));
+}
+
+/** 특정 날짜의 일정 목록 (시작시간 순). 공휴일에 쉬는 반복 일정은 빠집니다. */
 function eventsOn(date) {
   const key = ymd(date), dw = date.getDay(), out = [];
-  for (const e of sched.weekly) if (e.day === dw && !(e.off || []).includes(key)) out.push(e);
+  const hol = holidayOn(key);
+  for (const e of sched.weekly) {
+    if (e.day !== dw) continue;
+    if ((e.off || []).includes(key)) continue;
+    if (hol && e.onHoliday !== "keep") continue;   // 공휴일엔 기본적으로 쉽니다
+    out.push(e);
+  }
+  // 하루짜리 일정은 날짜를 콕 집어 넣은 것이므로 공휴일이어도 그대로 둡니다(예약 등).
   for (const e of sched.once) if (e.date === key) out.push(e);
   return out.sort((a, b) => mins(a.start) - mins(b.start) || a.title.localeCompare(b.title));
+}
+
+/** 공휴일이라 빠진 반복 일정들 */
+function skippedOn(date) {
+  const key = ymd(date), dw = date.getDay();
+  if (!holidayOn(key)) return [];
+  return sched.weekly.filter(e => e.day === dw && e.onHoliday !== "keep" && !(e.off || []).includes(key))
+    .sort((a, b) => mins(a.start) - mins(b.start));
 }
 
 /* ===================== 저장소 연결 ===================== */
@@ -273,6 +399,7 @@ function startTask(e) {
   });
   global_NA()?.armLimit(e, day.items[e.id]);
   toast(`${e.title} 시작 — 제한 ${limitOf(e)}분`);
+  applySpot(e, "atStart");
 }
 function completeTask(e) {
   const nm = nowMin(), w = windowOf(e);
@@ -293,9 +420,23 @@ function completeTask(e) {
     by: role()
   });
   global_NA()?.disarmLimit(e);
+  applySpot(e, "atDone");
   toast(over ? `${e.title} 완료 — 제한보다 ${human(el - lim)} 더 걸렸어요`
              : el == null ? `${e.title} 완료` : `${e.title} 완료 — ${human(el)}`);
 }
+/** 장소 판정을 백그라운드로 돌려 기록에 덧붙입니다. 화면을 막지 않습니다. */
+function applySpot(e, field) {
+  checkSpot(e).then(spot => {
+    if (!spot) return;
+    const rec = day.items[e.id];
+    if (!rec) return;              // 그새 되돌렸으면 아무것도 하지 않습니다
+    rec[field] = spot;
+    markDirty(e.id);
+    render();
+    if (spot === "away") toast(`${e.title} — 등록한 장소가 아닙니다`);
+  });
+}
+
 function undoTask(e) { setRec(e, null); global_NA()?.disarmLimit(e); toast("되돌렸습니다"); }
 
 /* ===================== 렌더 ===================== */
@@ -305,6 +446,8 @@ function renderHeader() {
   const hero = $("hero"), what = $("heroWhat"), when = $("heroWhen");
   const nm = nowMin();
   const list = eventsOn(now);
+  const hol = holidayOn(ymd(now));
+  $("todayLabel").textContent += hol ? `  ·  ${hol}` : "";
 
   const running = list.find(e => (day.items[e.id] || {}).state === "running");
   if (running) {
@@ -328,8 +471,13 @@ function renderHeader() {
     when.textContent = `${human(mins(next.start) - nm)} 뒤 · ${next.start}`;
   } else {
     hero.classList.add("idle");
-    what.textContent = list.length ? "오늘 일정 끝! 🎉" : "오늘은 일정이 없어요";
-    when.textContent = list.length ? "푹 쉬자" : "";
+    if (hol && !list.length) {
+      what.textContent = `🎌 ${hol} — 쉬는 날`;
+      when.textContent = "오늘은 일정 없이 쉬어요";
+    } else {
+      what.textContent = list.length ? "오늘 일정 끝! 🎉" : "오늘은 일정이 없어요";
+      when.textContent = list.length ? "푹 쉬자" : "";
+    }
   }
 }
 
@@ -337,15 +485,28 @@ function renderToday() {
   const wrap = $("timeline");
   const now = nowDate(), nm = nowMin();
   const list = eventsOn(now);
+  const hol = holidayOn(ymd(now));
+  const skipped = skippedOn(now);
   wrap.innerHTML = "";
+
+  if (hol) {
+    const b = document.createElement("div");
+    b.className = "holibar";
+    b.innerHTML = `<b>🎌 ${hol}</b>` + (skipped.length
+      ? `<span>${withEun(skipped.map(e => e.title).join(", "))} 공휴일이라 오늘 쉽니다</span>`
+      : `<span>공휴일입니다</span>`);
+    wrap.appendChild(b);
+  }
   if (!list.length) {
-    wrap.innerHTML = `<div class="empty"><strong>오늘은 비어 있어요</strong>일정 탭에서 추가할 수 있습니다.</div>`;
+    wrap.insertAdjacentHTML("beforeend",
+      `<div class="empty"><strong>${hol ? "푹 쉬는 날이에요" : "오늘은 비어 있어요"}</strong>${hol ? "" : "일정 탭에서 추가할 수 있습니다."}</div>`);
     return;
   }
+  const ov = overlapMap(list);
   let ruled = false;
   for (const e of list) {
     if (!ruled && mins(e.start) > nm) { wrap.appendChild(nowRule(now)); ruled = true; }
-    wrap.appendChild(eventRow(e, nm));
+    wrap.appendChild(eventRow(e, nm, ov.get(e.id)));
   }
   if (!ruled) wrap.appendChild(nowRule(now));
 }
@@ -356,7 +517,7 @@ function nowRule(now) {
   return d;
 }
 /** 진행 체크 대상이 아닌 일정 — 시간만 보여줍니다 */
-function plainRow(e, nm) {
+function plainRow(e, nm, clash) {
   const k = kindOf(e.kind);
   const w = windowOf(e);
   const li = document.createElement("li");
@@ -370,12 +531,30 @@ function plainRow(e, nm) {
     </div>`;
   li.querySelector(".title").textContent = e.title;
   li.querySelector(".sub").textContent = [k.name, e.place].filter(Boolean).join(" · ");
+  if (clash && clash.length) li.querySelector(".ev").appendChild(clashLine(clash));
   return li;
 }
 
-function eventRow(e, nm) {
+/** "겹침" 안내 한 줄 */
+function clashLine(names) {
+  const p = document.createElement("p");
+  p.className = "clash";
+  p.textContent = `⚠ ${withGwa([...new Set(names)].join(", "))} 시간이 겹칩니다`;
+  return p;
+}
+
+/** 마지막 글자에 받침이 있는지 */
+function hasBatchim(text) {
+  const code = String(text).trim().slice(-1).charCodeAt(0);
+  return code >= 0xAC00 && code <= 0xD7A3 && (code - 0xAC00) % 28 !== 0;
+}
+const withGwa = t => `${t}${hasBatchim(t) ? "과" : "와"}`;
+const withEun = t => `${t}${hasBatchim(t) ? "은" : "는"}`;
+const withEul = t => `${t}${hasBatchim(t) ? "을" : "를"}`;
+
+function eventRow(e, nm, clash) {
   const k = kindOf(e.kind);
-  if (e.track === false) return plainRow(e, nm);
+  if (e.track === false) return plainRow(e, nm, clash);
   const rec = day.items[e.id] || null;
   const st = stateOf(e, rec, nm);
   const lim = (rec && rec.limitMin) || limitOf(e);
@@ -389,7 +568,7 @@ function eventRow(e, nm) {
       <div class="ev-top">
         <span class="emoji">${k.emoji}</span>
         <span class="body"><span class="title"></span><span class="sub"></span></span>
-        <span class="badge ${st}">${STATE_LABEL[st]}</span>
+        <span class="badges"><span class="badge ${st}">${STATE_LABEL[st]}</span></span>
       </div>
       <div class="slot"></div>
       <div class="acts"></div>
@@ -397,6 +576,15 @@ function eventRow(e, nm) {
   li.querySelector(".title").textContent = e.title;
   li.querySelector(".sub").textContent =
     [k.name, e.place, `제한 ${lim}분`].filter(Boolean).join(" · ");
+
+  // 장소 확인 결과 — 좌표가 아니라 판정 결과만 표시합니다
+  const spot = rec && (rec.atDone || rec.atStart);
+  if (spot) {
+    const b = document.createElement("span");
+    b.className = "badge spot-" + spot;
+    b.textContent = SPOT_LABEL[spot];
+    li.querySelector(".badges").prepend(b);
+  }
 
   // 제한시간 진행바
   if (el != null) {
@@ -412,6 +600,8 @@ function eventRow(e, nm) {
     li.querySelector(".slot").innerHTML =
       `<div class="limitline"><span>체크 가능 ${hhmm(w.openM)} – ${hhmm(w.closeM)}</span><span></span></div>`;
   }
+
+  if (clash && clash.length) li.querySelector(".slot").appendChild(clashLine(clash));
 
   // 버튼
   const acts = li.querySelector(".acts");
@@ -450,13 +640,15 @@ function renderWeek() {
     const d = new Date(mon); d.setDate(mon.getDate() + i);
     const list = eventsOn(d);
     const isToday = ymd(d) === ymd(today);
+    const hol = holidayOn(ymd(d));
     const box = document.createElement("div");
-    box.className = "day" + (isToday ? " is-today" : "");
+    box.className = "day" + (isToday ? " is-today" : "") + (hol ? " is-holiday" : "");
     let doneCnt = 0;
     const tracked = list.filter(e => e.track !== false);
     if (isToday) doneCnt = tracked.filter(e => ["done", "over"].includes((day.items[e.id] || {}).state)).length;
     box.innerHTML = `<h3>${DOW[d.getDay()]}<span>${d.getMonth() + 1}.${d.getDate()}${isToday && tracked.length ? ` · ${doneCnt}/${tracked.length}` : ""}</span></h3>`;
-    if (!list.length) box.insertAdjacentHTML("beforeend", `<p class="none">없음</p>`);
+    if (hol) box.insertAdjacentHTML("beforeend", `<p class="holiname">🎌 ${hol}</p>`);
+    if (!list.length) box.insertAdjacentHTML("beforeend", `<p class="none">${hol ? "쉬는 날" : "없음"}</p>`);
     else {
       const ul = document.createElement("ul");
       for (const e of list) {
@@ -570,10 +762,11 @@ function renderEdit() {
   wl.innerHTML = "";
   for (const d of [1, 2, 3, 4, 5, 6, 0]) {
     const items = sched.weekly.filter(e => e.day === d).sort((a, b) => mins(a.start) - mins(b.start));
+    const ov = overlapMap(items);
     const sec = document.createElement("section");
-    sec.className = "dgrp" + (d === todayDow ? " is-today" : "");
+    sec.className = "dgrp" + (d === todayDow ? " is-today" : "") + (ov.size ? " has-clash" : "");
     sec.innerHTML = `<h3><span class="dname">${DOW[d]}요일</span>
-        <span class="cnt">${items.length ? items.length + "건" : ""}</span>
+        <span class="cnt">${items.length ? items.length + "건" : ""}${ov.size ? ` <b class="clashtag">겹침 ${ov.size}건</b>` : ""}</span>
         <button class="btn small addhere" type="button">+ 추가</button></h3>`;
     sec.querySelector(".addhere").addEventListener("click", () => prefillDay(d));
 
@@ -584,8 +777,8 @@ function renderEdit() {
       ul.className = "list";
       for (const e of items) {
         ul.appendChild(editRow(e,
-          `${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}`,
-          "weekly"));
+          `${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}${e.onHoliday === "keep" ? " · 공휴일에도 진행" : ""}${e.geo ? " · 📍장소확인" : ""}`,
+          "weekly", ov.get(e.id)));
       }
       sec.appendChild(ul);
     }
@@ -594,15 +787,76 @@ function renderEdit() {
 
   const once = sched.once.filter(e => e.date >= todayK).sort((a, b) => a.date.localeCompare(b.date) || mins(a.start) - mins(b.start));
   ol.innerHTML = once.length ? "" : `<li style="color:var(--ink-soft)">예정된 일정이 없습니다.</li>`;
-  for (const e of once) ol.appendChild(editRow(e, `${e.date} ${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}`, "once"));
+  // 하루짜리 일정은 같은 날짜에 있는 것들끼리, 그리고 그날 요일의 반복 일정과도 비교합니다.
+  for (const e of once) {
+    const sameDay = sched.once.filter(x => x.date === e.date)
+      .concat(sched.weekly.filter(w => w.day === new Date(e.date + "T12:00:00").getDay()
+                                    && !(w.off || []).includes(e.date)));
+    const clash = overlapMap(sameDay).get(e.id);
+    ol.appendChild(editRow(e, `${e.date} ${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}`, "once", clash));
+  }
 
   $("fName").value = sched.student || "";
   $("fBefore").value = sched.notifyBeforeMin;
   $("fWinBefore").value = cfg.check.beforeMin;
   $("fWinAfter").value = cfg.check.afterMin;
 }
+/** 입력 칸의 장소 표시를 갱신합니다. */
+function paintFormGeo() {
+  const el = $("geoState");
+  if (!el) return;
+  if (formGeo) {
+    el.textContent = `등록됨 ${formGeo.lat.toFixed(3)}, ${formGeo.lng.toFixed(3)} · 반경 ${formGeo.radius}m`;
+    el.className = "geoset";
+    $("fRadius").value = formGeo.radius;
+  } else {
+    el.textContent = "등록 안 됨 — 장소 확인을 쓰지 않습니다";
+    el.className = "";
+  }
+}
+
+/** 목록에서 고른 일정을 입력 칸에 그대로 올려 수정 모드로 들어갑니다. */
+function startEdit(e, bucket) {
+  editing = { bucket, id: e.id };
+  $("fTitle").value = e.title;
+  $("fKind").value = e.kind;
+  $("fStart").value = e.start;
+  $("fEnd").value = e.end || "";
+  $("fLimit").value = e.limitMin == null ? "" : e.limitMin;
+  $("fPlace").value = e.place || "";
+  $("fDate").value = bucket === "once" ? e.date : "";
+  document.querySelectorAll("#fDows input").forEach(i => { i.checked = bucket === "weekly" && Number(i.value) === e.day; });
+  $("fTrack").checked = e.track !== false;
+  $("fHoli").checked = e.onHoliday === "keep";
+  formGeo = e.geo ? { ...e.geo } : null;
+  paintFormGeo();
+
+  $("formTitle").textContent = "일정 수정";
+  $("fSubmit").textContent = "수정 저장";
+  $("fCancel").classList.remove("hidden");
+  const b = $("editBanner");
+  b.classList.remove("hidden");
+  b.textContent = `✏️ ${withEul(e.title)} 고치는 중입니다 — ${bucket === "once" ? e.date : DOW[e.day] + "요일"} ${e.start}. 새로 추가하려면 '수정 취소'를 누르세요.`;
+  try { $("addPanel").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  catch (err) { window.scrollTo({ top: 0 }); }
+  setTimeout(() => $("fTitle").focus(), 300);
+}
+function cancelEdit(silent) {
+  editing = null;
+  $("addForm").reset();
+  $("fTrack").checked = true; $("fHoli").checked = false;
+  formGeo = null; paintFormGeo();
+  $("formTitle").textContent = "일정 추가";
+  $("fSubmit").textContent = "일정 추가";
+  $("fCancel").classList.add("hidden");
+  $("editBanner").classList.add("hidden");
+  renderEdit();
+  if (!silent) toast("수정을 취소했습니다");
+}
+
 /** 요일 헤더의 "+ 추가" — 그 요일만 체크하고 입력 칸으로 올려 줍니다. */
 function prefillDay(d) {
+  if (editing) cancelEdit(true);
   document.querySelectorAll("#fDows input").forEach(i => { i.checked = Number(i.value) === d; });
   $("fDate").value = "";
   try { $("addPanel").scrollIntoView({ behavior: "smooth", block: "start" }); }
@@ -611,16 +865,34 @@ function prefillDay(d) {
   toast(`${DOW[d]}요일에 추가합니다`);
 }
 
-function editRow(e, meta, bucket) {
+function editRow(e, meta, bucket, clash) {
   const k = kindOf(e.kind);
   const li = document.createElement("li");
   li.innerHTML = `<span class="dot" style="--c:${k.color}"></span>
     <span class="meta"><b></b><span></span></span>
-    <button class="btn small danger" type="button">삭제</button>`;
+    <button class="btn small btn-edit" type="button">수정</button>
+    <button class="btn small danger btn-del" type="button">삭제</button>`;
   li.querySelector("b").textContent = `${k.emoji} ${e.title}`;
   li.querySelector(".meta span").textContent = meta + (e.place ? ` · ${e.place}` : "");
-  li.querySelector("button").addEventListener("click", () => {
+  if (clash && clash.length) li.querySelector(".meta").appendChild(clashLine(clash));
+
+  // 제목 영역을 누르면 바로 수정 모드로 들어갑니다.
+  const meta_ = li.querySelector(".meta");
+  meta_.classList.add("tapedit");
+  meta_.setAttribute("role", "button");
+  meta_.setAttribute("tabindex", "0");
+  meta_.title = "눌러서 수정";
+  const go = () => startEdit(e, bucket);
+  meta_.addEventListener("click", go);
+  meta_.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
+
+  if (editing && editing.id === e.id) li.classList.add("editing");
+
+  li.querySelector(".btn-edit").addEventListener("click", go);
+  li.querySelector(".btn-del").addEventListener("click", () => {
+    if (!confirm(`${withEul(e.title)} 지울까요?`)) return;
     sched[bucket] = sched[bucket].filter(x => x.id !== e.id);
+    if (editing && editing.id === e.id) cancelEdit(true);
     writeLS(LS.sched, sched); renderEdit(); renderWeek(); renderToday();
     toast("삭제했습니다. 저장소에 반영하려면 아래 저장 버튼을 누르세요.");
   });
@@ -628,6 +900,18 @@ function editRow(e, meta, bucket) {
 }
 
 /* ---- 설정 ---- */
+function paintGeoSettings() {
+  const b = $("geoToggle");
+  if (!b) return;
+  const on = geoOn();
+  b.textContent = on ? "장소 확인 끄기" : "장소 확인 켜기";
+  b.className = "btn" + (on ? " go" : "");
+  const withGeo = sched.weekly.concat(sched.once).filter(e => e.geo).length;
+  $("geoInfo").textContent = on
+    ? `켜짐 — 장소가 등록된 일정 ${withGeo}개. 체크할 때 근처인지만 판정하고 좌표는 저장하지 않습니다.`
+    : `꺼짐 — 장소가 등록된 일정은 ${withGeo}개 있지만 이 기기에서는 판정하지 않습니다.`;
+}
+
 function renderSettings() {
   $("sOwner").value = conn.owner;
   $("sRepo").value = conn.repo;
@@ -635,11 +919,24 @@ function renderSettings() {
   $("sStatusRepo").value = conn.statusRepo || "";
   $("sRole").value = conn.role;
   $("sToken").value = readLS(LS.token, "") ? "••••••••••••••••" : "";
+  const yr = String(nowDate().getFullYear());
+  const hi = $("holiInfo");
+  if (holidayYearMissing(yr)) {
+    hi.className = "hint warnline";
+    hi.textContent = `${yr}년 공휴일이 등록되지 않았습니다. 저장소의 holidays.json 에 추가해 주세요. 그전까지는 공휴일에도 평소대로 일정이 뜹니다.`;
+  } else {
+    const cnt = Object.keys(holidays).filter(k => k.startsWith(yr + "-")).length;
+    const next = Object.keys(holidays).filter(k => k >= ymd(nowDate())).sort()[0];
+    hi.className = "hint";
+    hi.textContent = `${yr}년 공휴일 ${cnt}일 등록됨` + (next ? ` · 다음 공휴일 ${next} ${holidays[next]}` : "");
+  }
+
   const r = schedRepo.rate;
   $("rateInfo").textContent = r.remaining == null
     ? "아직 GitHub에 요청하지 않았습니다."
     : `남은 요청 ${r.remaining}회${r.reset ? ` · ${new Date(r.reset).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}에 회복` : ""}`;
   paintNotify();
+  paintGeoSettings();
 }
 
 function render() {
@@ -777,7 +1074,15 @@ function buildIcs() {
     if (e.place) L.push(`LOCATION:${icsEsc(e.place)}`);
     L.push(`CATEGORIES:${icsEsc(k.name)}`);
     if (rrule) L.push(rrule);
-    if ((e.off || []).length) L.push("EXDATE;TZID=Asia/Seoul:" + e.off.map(d => dtL(d, e.start)).join(","));
+    // 제외일 = 수동 off + (공휴일에 쉬는 일정이면) 그 요일에 걸리는 공휴일
+    const ex = new Set(e.off || []);
+    if (rrule && e.onHoliday !== "keep") {
+      const dow = e.day;
+      for (const k of Object.keys(holidays)) {
+        if (k >= dateStr && new Date(k + "T12:00:00").getDay() === dow) ex.add(k);
+      }
+    }
+    if (ex.size) L.push("EXDATE;TZID=Asia/Seoul:" + [...ex].sort().map(d => dtL(d, e.start)).join(","));
     if (before > 0) L.push("BEGIN:VALARM", "ACTION:DISPLAY", `TRIGGER:-PT${before}M`,
       "DESCRIPTION:" + icsEsc(`${before}분 뒤 ${e.title}`), "END:VALARM");
     L.push("END:VEVENT");
@@ -825,14 +1130,106 @@ function wire() {
     if (!days.length && !date) { toast("요일이나 날짜 중 하나는 골라 주세요"); return; }
     const limitMin = limitRaw === "" ? null : Math.max(1, Number(limitRaw));
     const track = $("fTrack").checked;
-    if (days.length) for (const d of days) sched.weekly.push({ id: uid(), day: d, start, end, limitMin, title, kind, place, track, off: [] });
-    if (date) sched.once.push({ id: uid(), date, start, end, limitMin, title, kind, place, track });
+    const onHoliday = $("fHoli").checked ? "keep" : "skip";
+
+    if (editing) {
+      // 수정 — 고른 일정 하나만 바꿉니다. 여러 요일을 한 번에 옮길 수는 없습니다.
+      if (days.length > 1) { toast("수정할 때는 요일을 하나만 고르세요"); return; }
+      if (days.length && date) { toast("요일과 날짜 중 하나만 고르세요"); return; }
+      const cur = sched[editing.bucket].find(x => x.id === editing.id);
+      if (!cur) { toast("수정할 일정을 찾지 못했습니다"); cancelEdit(true); return; }
+
+      const moved = date && editing.bucket === "weekly" ? "once"
+                  : days.length && editing.bucket === "once" ? "weekly" : null;
+      const next = { ...cur, start, end, limitMin, title, kind, place, track, onHoliday, geo: formGeo };
+      if (days.length) { next.day = days[0]; delete next.date; }
+      if (date) { next.date = date; delete next.day; delete next.off; }
+
+      if (moved) {                       // 반복 ↔ 하루짜리 사이를 옮긴 경우
+        sched[editing.bucket] = sched[editing.bucket].filter(x => x.id !== editing.id);
+        sched[moved].push(next);
+      } else {
+        Object.assign(cur, next);
+      }
+      writeLS(LS.sched, sched);
+      cancelEdit(true);
+      renderWeek(); renderToday();
+      toast(`${withEul(title)} 고쳤습니다. 아래 저장 버튼으로 저장소에 반영하세요.`);
+      return;
+    }
+
+    if (days.length) for (const d of days) sched.weekly.push({ id: uid(), day: d, start, end, limitMin, title, kind, place, track, onHoliday, geo: formGeo, off: [] });
+    if (date) sched.once.push({ id: uid(), date, start, end, limitMin, title, kind, place, track, geo: formGeo });
     writeLS(LS.sched, sched);
-    ev.target.reset(); $("fStart").value = start; $("fTrack").checked = true;
+    ev.target.reset(); $("fStart").value = start; $("fTrack").checked = true; $("fHoli").checked = false;
+    formGeo = null; paintFormGeo();
     renderEdit(); renderWeek(); renderToday();
-    toast("추가했습니다. 아래 저장 버튼으로 저장소에 반영하세요.");
+
+    // 방금 넣은 일정이 기존 것과 겹치는지 바로 알려 줍니다(막지는 않습니다).
+    const hits = new Set();
+    for (const d of days) {
+      const items = sched.weekly.filter(x => x.day === d);
+      const m = overlapMap(items);
+      for (const x of items) if (x.title === title && m.has(x.id)) m.get(x.id).forEach(t => hits.add(`${DOW[d]} ${t}`));
+    }
+    if (date) {
+      const dow = new Date(date + "T12:00:00").getDay();
+      const items = sched.once.filter(x => x.date === date)
+        .concat(sched.weekly.filter(w => w.day === dow && !(w.off || []).includes(date)));
+      const m = overlapMap(items);
+      for (const x of items) if (x.title === title && m.has(x.id)) m.get(x.id).forEach(t => hits.add(t));
+    }
+    toast(hits.size
+      ? `추가했습니다 — ${withGwa([...hits].join(", "))} 시간이 겹칩니다`
+      : "추가했습니다. 아래 저장 버튼으로 저장소에 반영하세요.");
   });
 
+  $("fCancel").addEventListener("click", () => cancelEdit());
+
+  // ---- 장소 등록 ----
+  $("geoSet").addEventListener("click", async () => {
+    toast("위치를 읽는 중…");
+    try {
+      const pos = await readPosition();
+      // 소수점 3자리 = 약 110m 격자. 정확한 주소가 드러나지 않게 반올림해 저장합니다.
+      formGeo = {
+        lat: Math.round(pos.lat * 1000) / 1000,
+        lng: Math.round(pos.lng * 1000) / 1000,
+        radius: Math.max(50, Math.min(2000, Number($("fRadius").value) || 300))
+      };
+      paintFormGeo();
+      toast(`장소를 지정했습니다 (측정 오차 약 ${Math.round(pos.acc || 0)}m)`);
+    } catch (e) {
+      toast("위치를 읽지 못했습니다. 브라우저 위치 권한을 확인하세요.");
+    }
+  });
+  $("geoClear").addEventListener("click", () => { formGeo = null; paintFormGeo(); toast("장소를 지웠습니다"); });
+  $("fRadius").addEventListener("change", e => {
+    const v = Math.max(50, Math.min(2000, Number(e.target.value) || 300));
+    e.target.value = v;
+    if (formGeo) { formGeo.radius = v; paintFormGeo(); }
+  });
+
+  // ---- 설정: 장소 확인 켜기/끄기 ----
+  $("geoToggle").addEventListener("click", async () => {
+    if (geoOn()) { writeLS(LS_GEO, false); paintGeoSettings(); toast("장소 확인을 껐습니다"); return; }
+    try {
+      await readPosition();                  // 권한 요청을 겸합니다
+      writeLS(LS_GEO, true); paintGeoSettings(); toast("장소 확인을 켰습니다");
+    } catch (e) {
+      toast("위치 권한이 없어 켤 수 없습니다");
+    }
+  });
+  $("geoTest").addEventListener("click", async () => {
+    const today = eventsOn(nowDate()).filter(e => e.geo);
+    if (!today.length) { toast("오늘 일정 중 장소가 등록된 것이 없습니다"); return; }
+    toast("위치를 읽는 중…");
+    try {
+      const pos = await readPosition();
+      const lines = today.map(e => `${e.title} ${Math.round(distM(pos, e.geo))}m`);
+      $("geoInfo").textContent = `지금 위치 기준 — ${lines.join(" · ")} (측정 오차 약 ${Math.round(pos.acc || 0)}m)`;
+    } catch (e) { $("geoInfo").textContent = "위치를 읽지 못했습니다."; }
+  });
   $("fName").addEventListener("change", e => { sched.student = e.target.value.trim(); writeLS(LS.sched, sched); });
   $("fBefore").addEventListener("change", e => {
     sched.notifyBeforeMin = Math.max(0, Math.min(120, Number(e.target.value) || 0));
@@ -916,6 +1313,7 @@ function wire() {
 async function boot() {
   wire();
   await loadConfig();
+  await loadHolidays();
   await loadSchedule();
   lastDayKey = ymd(nowDate());
   await loadDay(true);

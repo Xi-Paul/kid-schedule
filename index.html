@@ -71,8 +71,10 @@
 
     <div id="editBody" class="hidden">
       <div class="panel" id="addPanel">
-        <h2>일정 추가</h2>
-        <p class="hint">제한시간을 비우면 종료−시작 시간을 제한시간으로 씁니다. 끝 시간도 없으면 60분입니다.</p>
+        <h2 id="formTitle">일정 추가</h2>
+        <p class="hint" id="formHint">제한시간을 비우면 종료−시작 시간을 제한시간으로 씁니다. 끝 시간도 없으면 60분입니다.
+          아래 목록에서 일정을 누르면 그 일정을 여기서 고칠 수 있습니다.</p>
+        <p class="editbanner hidden" id="editBanner"></p>
         <form id="addForm">
           <div class="row two">
             <div><label for="fTitle">무엇을</label><input type="text" id="fTitle" placeholder="예: 숙제" required></div>
@@ -95,8 +97,29 @@
               <input type="checkbox" id="fTrack" checked style="width:auto">
               진행 체크 대상 — 아이가 시작·완료를 누르고 제한시간을 잽니다
             </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);margin-top:8px">
+              <input type="checkbox" id="fHoli" style="width:auto">
+              공휴일에도 진행 — 끄면 국가 공휴일에 자동으로 빠집니다
+            </label>
           </div>
-          <button class="btn primary" type="submit" style="width:100%">일정 추가</button>
+          <div class="row">
+            <label>장소 확인 (선택)</label>
+            <div class="geobox">
+              <span id="geoState">등록 안 됨</span>
+              <span class="btns">
+                <button class="btn small" type="button" id="geoSet">지금 위치로 지정</button>
+                <input type="number" id="fRadius" min="50" max="2000" step="50" value="300" style="width:92px" title="반경(m)">
+                <button class="btn small danger" type="button" id="geoClear">지우기</button>
+              </span>
+            </div>
+            <p class="hint" style="margin:6px 0 0">그 장소에 가서 누르세요. 좌표는 약 110m 격자로 반올림해 저장합니다.
+              아이가 체크할 때 이 반경 안인지만 기기에서 판정하고, <b>아이 위치는 어디에도 기록하지 않습니다.</b>
+              저장소가 Public이면 이 대략 위치는 공개되니 <b>집 주소는 넣지 마세요.</b></p>
+          </div>
+          <div class="btns" style="margin-top:4px">
+            <button class="btn primary" type="submit" id="fSubmit" style="flex:1">일정 추가</button>
+            <button class="btn hidden" type="button" id="fCancel">수정 취소</button>
+          </div>
         </form>
       </div>
 
@@ -170,6 +193,19 @@
         <button class="btn danger" id="clearToken">토큰 지우기</button>
       </div>
       <p class="hint" style="margin:14px 0 0" id="rateInfo"></p>
+      <p class="hint" style="margin:6px 0 0" id="holiInfo"></p>
+    </div>
+
+    <div class="panel">
+      <h2>장소 확인</h2>
+      <p class="hint">켜면 아이가 시작·완료를 누를 때 등록된 장소 근처인지 기기에서 판정합니다.
+        저장되는 값은 <code>장소 확인</code> / <code>다른 곳</code> / <code>확인 못 함</code> 셋 중 하나뿐이고,
+        좌표는 기기 밖으로 나가지 않습니다. 기기마다 따로 켜야 합니다.</p>
+      <div class="btns">
+        <button class="btn" id="geoToggle">불러오는 중</button>
+        <button class="btn" id="geoTest">지금 위치 확인해 보기</button>
+      </div>
+      <p class="hint" style="margin:12px 0 0" id="geoInfo"></p>
     </div>
 
     <div class="panel">

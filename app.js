@@ -422,7 +422,7 @@ function eventRow(e, nm) {
     acts.appendChild(b);
   };
   if (!canWrite()) {
-    acts.innerHTML = `<span class="limitline" style="margin:0">읽기 전용 — 설정에서 토큰을 넣으면 체크할 수 있습니다</span>`;
+    acts.remove();                       // 읽기 전용 안내는 위 알림 박스에 한 번만 띄웁니다
   } else if (st === "locked") {
     add("시작", "go", null, true);
   } else if (st === "todo") {
@@ -564,9 +564,33 @@ function renderEdit() {
 
   const wl = $("weeklyList"), ol = $("onceList");
   const todayK = ymd(nowDate());
-  const weekly = [...sched.weekly].sort((a, b) => ((a.day + 6) % 7) - ((b.day + 6) % 7) || mins(a.start) - mins(b.start));
-  wl.innerHTML = weekly.length ? "" : `<li style="color:var(--ink-soft)">아직 없습니다.</li>`;
-  for (const e of weekly) wl.appendChild(editRow(e, `${DOW[e.day]}요일 ${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}`, "weekly"));
+  const todayDow = nowDate().getDay();
+
+  // 요일별로 묶어서 그립니다. 비어 있는 요일도 보여야 빠진 날을 알 수 있습니다.
+  wl.innerHTML = "";
+  for (const d of [1, 2, 3, 4, 5, 6, 0]) {
+    const items = sched.weekly.filter(e => e.day === d).sort((a, b) => mins(a.start) - mins(b.start));
+    const sec = document.createElement("section");
+    sec.className = "dgrp" + (d === todayDow ? " is-today" : "");
+    sec.innerHTML = `<h3><span class="dname">${DOW[d]}요일</span>
+        <span class="cnt">${items.length ? items.length + "건" : ""}</span>
+        <button class="btn small addhere" type="button">+ 추가</button></h3>`;
+    sec.querySelector(".addhere").addEventListener("click", () => prefillDay(d));
+
+    if (!items.length) {
+      sec.insertAdjacentHTML("beforeend", `<p class="none">없음</p>`);
+    } else {
+      const ul = document.createElement("ul");
+      ul.className = "list";
+      for (const e of items) {
+        ul.appendChild(editRow(e,
+          `${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}`,
+          "weekly"));
+      }
+      sec.appendChild(ul);
+    }
+    wl.appendChild(sec);
+  }
 
   const once = sched.once.filter(e => e.date >= todayK).sort((a, b) => a.date.localeCompare(b.date) || mins(a.start) - mins(b.start));
   ol.innerHTML = once.length ? "" : `<li style="color:var(--ink-soft)">예정된 일정이 없습니다.</li>`;
@@ -577,6 +601,16 @@ function renderEdit() {
   $("fWinBefore").value = cfg.check.beforeMin;
   $("fWinAfter").value = cfg.check.afterMin;
 }
+/** 요일 헤더의 "+ 추가" — 그 요일만 체크하고 입력 칸으로 올려 줍니다. */
+function prefillDay(d) {
+  document.querySelectorAll("#fDows input").forEach(i => { i.checked = Number(i.value) === d; });
+  $("fDate").value = "";
+  try { $("addPanel").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  catch (e) { window.scrollTo({ top: 0 }); }
+  setTimeout(() => $("fTitle").focus(), 300);
+  toast(`${DOW[d]}요일에 추가합니다`);
+}
+
 function editRow(e, meta, bucket) {
   const k = kindOf(e.kind);
   const li = document.createElement("li");
@@ -641,6 +675,12 @@ function paintNotify() {
   if (!("Notification" in window)) {
     txt.textContent = "이 브라우저는 알림을 지원하지 않습니다. 캘린더 파일을 쓰세요.";
     btn.classList.add("hidden"); return;
+  }
+  if (!canWrite()) {
+    bar.classList.remove("on"); bar.classList.add("warn");
+    txt.textContent = "읽기 전용입니다. 체크하려면 설정 탭에서 토큰을 넣어 주세요.";
+    btn.classList.add("hidden");
+    return;
   }
   btn.classList.remove("hidden");
   if (Notification.permission === "granted" && notifyOn) {

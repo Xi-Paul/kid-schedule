@@ -70,7 +70,7 @@
     </div>
 
     <div id="editBody" class="hidden">
-      <div class="panel">
+      <div class="panel" id="addPanel">
         <h2>일정 추가</h2>
         <p class="hint">제한시간을 비우면 종료−시작 시간을 제한시간으로 씁니다. 끝 시간도 없으면 60분입니다.</p>
         <form id="addForm">
@@ -100,8 +100,16 @@
         </form>
       </div>
 
-      <div class="panel"><h2>매주 반복 일정</h2><ul class="list" id="weeklyList"></ul></div>
-      <div class="panel"><h2>하루만 있는 일정</h2><ul class="list" id="onceList"></ul></div>
+      <div class="panel">
+        <h2>매주 반복 일정</h2>
+        <p class="hint">요일별로 묶어서 보여줍니다. 각 요일의 <b>+ 추가</b>를 누르면 그 요일이 미리 선택된 채로 입력 칸으로 올라갑니다.</p>
+        <div id="weeklyList" class="daygroups"></div>
+      </div>
+      <div class="panel">
+        <h2>하루만 있는 일정</h2>
+        <p class="hint">지난 날짜는 자동으로 숨깁니다.</p>
+        <ul class="list" id="onceList"></ul>
+      </div>
 
       <div class="panel">
         <h2>기본값</h2>

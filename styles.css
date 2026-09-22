@@ -23,13 +23,15 @@ button[disabled]{cursor:not-allowed;opacity:.45}
 
 /* header */
 header{position:sticky;top:0;z-index:20;padding:calc(12px + var(--safe-t)) 16px 12px;background:var(--ink);color:#fff}
+header > *{max-width:780px;margin-left:auto;margin-right:auto}
 @media (prefers-color-scheme:dark){header{background:#0A131C}}
 .brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .brand h1{font-family:var(--round);font-weight:400;font-size:20px;margin:0;letter-spacing:.5px}
 .brand .today{font-size:13px;opacity:.75;font-variant-numeric:tabular-nums}
-.hero{margin-top:14px;min-height:52px}
+.hero{margin-top:14px;min-height:52px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.hero .when{margin:0}
 .hero .what{font-family:var(--round);font-size:28px;line-height:1.1;margin:0}
-.hero .when{font-size:14px;opacity:.8;margin:4px 0 0;font-variant-numeric:tabular-nums}
+.hero .when{font-size:14px;opacity:.8;font-variant-numeric:tabular-nums}
 .hero.idle .what{font-size:22px}
 .syncline{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;opacity:.7}
 .syncline .dot{width:7px;height:7px;border-radius:50%;background:var(--mute);flex:none}
@@ -43,6 +45,15 @@ nav.tabs button{flex:1;background:none;border:0;padding:13px 4px 11px;font-size:
   color:var(--ink-soft);border-bottom:3px solid transparent}
 nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--now)}
 main{max-width:780px;margin:0 auto;padding:16px}
+
+/* 넓은 화면에서는 본문을 넓히고 오늘 목록을 2열로 흘립니다.
+   폰(760px 미만)에서는 지금과 똑같이 한 줄씩 쌓입니다. */
+@media (min-width:1100px){
+  main{max-width:1100px}
+  header > *{max-width:1100px}
+  .tl{column-count:2;column-gap:20px}
+  .tl > li,.tl .nowline{break-inside:avoid;-webkit-column-break-inside:avoid}
+}
 
 /* today list */
 .tl{list-style:none;margin:0;padding:0}
@@ -146,3 +157,19 @@ table.rec td.over{color:var(--warn);font-weight:600}
   opacity:0;pointer-events:none;transition:opacity .2s;max-width:88vw;text-align:center}
 .toast.show{opacity:1}
 @media (prefers-color-scheme:dark){.toast{background:#2B3E52}}
+
+/* ---- 편집 탭: 요일별 그룹 ---- */
+.daygroups{display:grid;gap:12px}
+@media (min-width:640px){.daygroups{grid-template-columns:1fr 1fr}}
+@media (min-width:1100px){.daygroups{grid-template-columns:repeat(3,1fr)}}
+.dgrp{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--paper)}
+.dgrp.is-today{border-color:var(--now);border-width:2px;padding:9px 11px}
+.dgrp h3{display:flex;align-items:center;gap:8px;margin:0 0 6px;
+  font-family:var(--round);font-weight:400;font-size:16px}
+.dgrp h3 .dname{flex:none}
+.dgrp h3 .cnt{flex:1;font-family:var(--sans);font-size:12px;color:var(--ink-soft)}
+.dgrp h3 .addhere{padding:4px 9px;font-size:12px;background:var(--card)}
+.dgrp .none{margin:2px 0 4px;font-size:13px;color:var(--mute)}
+.dgrp .list li{padding:8px 0;gap:8px}
+.dgrp .list li:first-child{padding-top:4px}
+.dgrp .list .meta b{font-size:14px}

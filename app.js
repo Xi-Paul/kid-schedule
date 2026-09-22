@@ -521,8 +521,11 @@ function completeTask(e) {
   });
   global_NA()?.disarmLimit(e);
   applySpot(e, "atDone");
-  toast(over ? `${e.title} 완료 — 제한보다 ${human(el - lim)} 더 걸렸어요`
-             : el == null ? `${e.title} 완료` : `${e.title} 완료 — ${human(el)}`);
+  // 시간을 넘겨도 완료는 축하합니다. 끝까지 한 것이 더 중요합니다.
+  const cheer = over ? PRAISE_OVER[Math.floor(Math.random() * PRAISE_OVER.length)]
+                     : PRAISE[Math.floor(Math.random() * PRAISE.length)];
+  toast(`${e.title} 완료 — ${cheer}${el != null ? ` (${human(el)})` : ""}`);
+  maybeCelebrate(e.kid);
 }
 /** 장소 판정을 백그라운드로 돌려 기록에 덧붙입니다. 화면을 막지 않습니다. */
 function applySpot(e, field) {
@@ -566,7 +569,8 @@ function ownDone(kidId, id) {
     state: over ? "over" : "done", doneAt,
     elapsedMin: el == null ? null : Math.round(el)
   });
-  toast(el == null ? `${o.title} 완료!` : `${o.title} 완료 — ${human(el)}`);
+  toast(`${o.title} 완료 — ${PRAISE[Math.floor(Math.random() * PRAISE.length)]}${el != null ? ` (${human(el)})` : ""}`);
+  maybeCelebrate(kidId);
 }
 function ownDel(kidId, id) {
   delete ownOf(kidId)[id]; markMeta(kidId); render();
@@ -640,6 +644,215 @@ function renderReflect() {
   if (document.activeElement !== $("rNext")) $("rNext").value = R.next || "";
 }
 
+/* ===================== 음성 알림 =====================
+ * 일정 제목을 그대로 읽어 줍니다. 소리는 화면 알림보다 훨씬 빨리 질리므로
+ * 네 가지 제동을 걸어 둡니다.
+ *   1) 하루 최대 횟수 (기본 8회)
+ *   2) 조용한 시간대 (기본 21:30~07:00) 에는 말하지 않음
+ *   3) 같은 일정의 같은 상황은 하루 한 번만
+ *   4) 문구를 여러 개 돌려 씀 — 같은 말 반복이 제일 지치게 합니다
+ * 브라우저 정책상 사용자가 한 번 눌러 켜야 소리가 납니다. 앱이 닫히면 울리지 않습니다.
+ */
+const LS_VOICE = "ks2.voice.v1";
+const LS_VCNT = "ks2.voicecount.v1";
+const voiceCfg = () => Object.assign(
+  { on: false, uri: "", rate: 0.95, maxPerDay: 8, quietFrom: "21:30", quietTo: "07:00" },
+  readLS(LS_VOICE, {}));
+const hasTTS = () => typeof window !== "undefined" && "speechSynthesis" in window;
+
+let voiceList = [];
+function loadVoices() {
+  if (!hasTTS()) return;
+  voiceList = window.speechSynthesis.getVoices() || [];
+  // 목록이 늦게 채워지는 브라우저가 있습니다.
+  if (!loadVoices._bound) {
+    loadVoices._bound = true;
+    window.speechSynthesis.addEventListener?.("voiceschanged", () => {
+      voiceList = window.speechSynthesis.getVoices() || [];
+      paintVoiceSettings();
+    });
+  }
+}
+const koVoices = () => voiceList.filter(v => (v.lang || "").toLowerCase().startsWith("ko"));
+
+/** 조용한 시간대인지. 자정을 넘는 구간도 다룹니다. */
+function inQuietHours(cfgv) {
+  const nm = nowMin(), a = mins(cfgv.quietFrom), b = mins(cfgv.quietTo);
+  return a <= b ? (nm >= a && nm < b) : (nm >= a || nm < b);
+}
+function voiceCountToday() {
+  const c = readLS(LS_VCNT, {});
+  return c.date === dayKey ? (c.n || 0) : 0;
+}
+function bumpVoiceCount() { writeLS(LS_VCNT, { date: dayKey, n: voiceCountToday() + 1 }); }
+
+/**
+ * 말하기. 막히는 경우(꺼짐·조용한 시간·횟수 초과)에는 조용히 아무것도 하지 않습니다.
+ * @param {string} text  읽을 말
+ * @param {boolean} force 설정 미리듣기처럼 제동을 건너뛸 때
+ */
+function speak(text, force) {
+  if (!hasTTS() || !text) return false;
+  const v = voiceCfg();
+  if (!force) {
+    if (!v.on) return false;
+    if (inQuietHours(v)) return false;
+    if (voiceCountToday() >= v.maxPerDay) return false;
+  }
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    const pick = voiceList.find(x => x.voiceURI === v.uri) || koVoices()[0];
+    if (pick) { u.voice = pick; u.lang = pick.lang; } else { u.lang = "ko-KR"; }
+    u.rate = Number(v.rate) || 0.95;
+    u.pitch = 1.05;
+    window.speechSynthesis.cancel();      // 밀리지 않게 앞엣것은 끊습니다
+    window.speechSynthesis.speak(u);
+    if (!force) bumpVoiceCount();
+    return true;
+  } catch (e) { return false; }
+}
+
+/* 같은 상황을 하루에 두 번 말하지 않습니다 */
+const saidToday = new Set();
+function sayOnce(key, text) {
+  if (saidToday.has(key)) return;
+  if (speak(text)) saidToday.add(key);
+}
+
+/** 일정 제목을 넣은 말들. 같은 말이 반복되지 않게 돌려 씁니다. */
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const sayPre = (title, m) => pick([
+  `${m}분 뒤에 ${title} 할 시간이야`,
+  `곧 ${title} 시작이야. ${m}분 남았어`,
+  `${title} 준비할 시간이야. ${m}분 뒤야`
+]);
+const sayStart = title => pick([
+  `${title} 시작할 시간이야`,
+  `자, ${title} 하러 가자`,
+  `지금부터 ${title}야`
+]);
+const sayOver = title => pick([
+  `${title} 시간이 조금 지났어. 마무리해 볼까`,
+  `${title} 정리할 시간이야`
+]);
+
+/* ===================== 성취 표시 =====================
+ * 설계 원칙 세 가지:
+ *  1) 연속 기록이 끊겨도 나무라지 않습니다. 끊기면 배지가 조용히 사라질 뿐입니다.
+ *  2) 제한시간을 넘겨도 "완료"는 축하합니다. 끝까지 한 것이 더 중요합니다.
+ *  3) 형제끼리 비교하는 화면은 만들지 않습니다.
+ */
+const PRAISE = ["잘했어! 🎉", "좋아, 하나 끝! 👏", "멋지다! ✨", "착착 해내는 중! 💪", "오늘도 해냈네! 🌟"];
+const PRAISE_OVER = ["끝까지 해낸 게 더 멋져! 👏", "포기 안 했네, 잘했어! 💪", "시간은 넘었지만 완주! 🎯"];
+
+/** 오늘 진행 상황 */
+function todayProgress(kidId) {
+  const nm = nowMin();
+  const all = eventsOn(nowDate(), kidId).filter(e => e.track !== false);
+
+  /* 체크 창이 닫혀 이제 손쓸 수 없는 것(missed)은 분모에서 뺍니다.
+     안 그러면 아침에 하나 놓친 날은 저녁에 아무리 해도 100%가 되지 않고,
+     아이에게 "이미 망한 날"이 되어 버립니다. 놓친 수는 따로 셉니다. */
+  const alive = [], recs = [];
+  let missed = 0;
+  for (const e of all) {
+    const r = (dayMap[e.kid] && dayMap[e.kid].items[e.id]) || null;
+    if (stateOf(e, r, nm) === "missed") { missed++; continue; }
+    alive.push(e); recs.push(r);
+  }
+  const list = alive;
+  const done = recs.filter(r => r && ["done", "over"].includes(r.state)).length;
+  const own = Object.values((dayMap[kidId] && dayMap[kidId].own) || {});
+  return {
+    total: list.length, done, missed, planned: all.length,
+    pct: list.length ? Math.round((done / list.length) * 100) : 0,
+    allDone: list.length > 0 && done === list.length,
+    inTime: recs.filter(r => r && r.state === "done").length,
+    overCnt: recs.filter(r => r && r.state === "over").length,
+    ownTotal: own.length,
+    ownDone: own.filter(o => ["done", "over"].includes(o.state)).length
+  };
+}
+
+/** 오늘 화면에 띄울 배지. 없으면 빈 배열. */
+function todayBadges(kidId) {
+  const p = todayProgress(kidId);
+  const out = [];
+  if (p.allDone) out.push({ e: "🎉", t: "오늘 계획 다 했어요" });
+  if (p.allDone && p.overCnt === 0 && p.total >= 2) out.push({ e: "⏱", t: "전부 시간 안에" });
+  if (p.ownTotal && p.ownDone === p.ownTotal) out.push({ e: "🌱", t: "스스로 정한 것도 완료" });
+  else if (p.ownDone) out.push({ e: "🌱", t: `스스로 ${p.ownDone}개 해냄` });
+  const R = reflectOf(kidId);
+  if (R && (R.rating || R.good)) out.push({ e: "📝", t: "오늘 돌아보기 완료" });
+  return out;
+}
+
+function renderProgress() {
+  const host = $("progWrap");
+  if (!host) return;
+  const kid = oneKid();
+  host.classList.toggle("hidden", !kid);
+  if (!kid) return;
+
+  const p = todayProgress(kid);
+  const C = 2 * Math.PI * 26;                       // 반지름 26 원둘레
+  $("progArc").setAttribute("stroke-dasharray", `${(C * p.pct) / 100} ${C}`);
+  $("progText").textContent = p.total ? `${p.done}/${p.total}` : "—";
+  $("progMiss").textContent = p.missed ? `못 한 것 ${p.missed}` : "";
+  $("progMiss").classList.toggle("hidden", !p.missed);
+  host.dataset.full = p.allDone ? "1" : "0";
+
+  const bw = $("badgeRow");
+  bw.innerHTML = "";
+  for (const b of todayBadges(kid)) {
+    const el = document.createElement("span");
+    el.className = "achv";
+    el.textContent = `${b.e} ${b.t}`;
+    bw.appendChild(el);
+  }
+}
+
+/** 오늘 계획을 다 채운 순간 한 번만 축하합니다. */
+const LS_CELEB = "ks2.celeb.v1";
+function maybeCelebrate(kidId) {
+  const p = todayProgress(kidId);
+  if (!p.allDone) return;
+  const key = `${kidId}|${dayKey}`;
+  if (readLS(LS_CELEB, "") === key) return;          // 오늘 이미 축하함
+  writeLS(LS_CELEB, key);
+  speak(pick([
+    `${(kidById(kidId) || {}).name || ""} 오늘 계획 다 했어. 정말 잘했어`,
+    `오늘 할 일 전부 끝냈어. 대단해`,
+    `다 해냈네. 오늘 정말 잘했어`
+  ]));
+  celebrate(`${(kidById(kidId) || {}).name || ""} 오늘 계획 완료!`, "스스로 해낸 하루예요 🎉");
+}
+
+function celebrate(title, sub) {
+  const el = $("celeb");
+  if (!el) return;
+  $("celebTitle").textContent = title;
+  $("celebSub").textContent = sub || "";
+  // 움직임을 줄이도록 설정한 기기에서는 색종이를 뿌리지 않습니다.
+  const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const box = $("celebBits");
+  box.innerHTML = "";
+  if (!calm) {
+    const cols = ["#3B82F6", "#A855F7", "#F59E0B", "#10B981", "#EC4899", "#06B6D4"];
+    for (let i = 0; i < 28; i++) {
+      const b = document.createElement("i");
+      b.style.left = Math.random() * 100 + "%";
+      b.style.background = cols[i % cols.length];
+      b.style.animationDelay = (Math.random() * 0.5).toFixed(2) + "s";
+      b.style.animationDuration = (1.6 + Math.random() * 0.9).toFixed(2) + "s";
+      box.appendChild(b);
+    }
+  }
+  el.classList.add("show");
+  clearTimeout(celebrate._t);
+  celebrate._t = setTimeout(() => el.classList.remove("show"), 3200);
+}
+
 /* ===================== 렌더 ===================== */
 function renderHeader() {
   const now = nowDate();
@@ -676,8 +889,9 @@ function renderHeader() {
       what.textContent = `🎌 ${hol} — 쉬는 날`;
       when.textContent = "오늘은 일정 없이 쉬어요";
     } else {
-      what.textContent = list.length ? "오늘 일정 끝! 🎉" : "오늘은 일정이 없어요";
-      when.textContent = list.length ? "푹 쉬자" : "";
+      const p = oneKid() ? todayProgress(oneKid()) : null;
+      what.textContent = list.length ? (p && p.allDone ? "오늘 계획 다 했어요! 🎉" : "오늘 일정 끝! 🎉") : "오늘은 일정이 없어요";
+      when.textContent = list.length ? (p && p.allDone ? `${p.done}개 모두 완료 — 푹 쉬자` : "푹 쉬자") : "";
     }
   }
 }
@@ -1103,7 +1317,25 @@ function paintReport(R, label) {
   const rate = R.total ? Math.round((R.done / R.total) * 100) : 0;
   const avg = R.elapsedN ? Math.round(R.elapsed / R.elapsedN) : null;
 
-  let h = `<div class="stats">
+  // 잘한 점을 먼저 보여 줍니다. 못한 점을 세는 화면이 되지 않게.
+  const hi = [];
+  const fullDays = R.days.filter(d => d.plan && d.done === d.plan).length;
+  if (fullDays) hi.push(`🎉 계획을 전부 채운 날 ${fullDays}일`);
+  if (R.own.done) hi.push(`🌱 스스로 정한 것 ${R.own.done}개 해냄`);
+  if (R.books.length) hi.push(`📚 책 ${R.books.length}권 읽음`);
+  if (R.sums.pages) hi.push(`✏️ ${R.sums.pages}쪽 풀어냄`);
+  if (R.sums.speak) hi.push(`🗣 낭독 ${R.sums.speak}번`);
+  if (R.reflects.length) hi.push(`📝 돌아보기 ${R.reflects.length}일 기록`);
+  const inTime = R.done - R.over;
+  if (inTime > 0 && R.over === 0 && R.done >= 3) hi.push(`⏱ 전부 제한시간 안에`);
+
+  let h = "";
+  if (hi.length) {
+    h += `<div class="panel hipanel"><h2>이번 ${repMode === "week" ? "주" : "달" } 잘한 것</h2>
+      <div class="hirow">${hi.map(x => `<span class="achv big">${x}</span>`).join("")}</div></div>`;
+  }
+
+  h += `<div class="stats">
       <div class="stat"><b>${rate}%</b><span>완료율</span></div>
       <div class="stat"><b>${R.done}/${R.total}</b><span>완료 / 계획</span></div>
       <div class="stat"><b>${R.over}</b><span>제한시간 초과</span></div>
@@ -1427,6 +1659,48 @@ function paintGeoSettings() {
     : `꺼짐 — 장소가 등록된 일정은 ${withGeo}개 있지만 이 기기에서는 판정하지 않습니다.`;
 }
 
+function paintVoiceSettings() {
+  const b = $("voiceToggle");
+  if (!b) return;
+  const v = voiceCfg();
+  if (!hasTTS()) {
+    b.disabled = true; b.textContent = "이 기기는 음성을 지원하지 않습니다";
+    $("voiceInfo").textContent = "";
+    return;
+  }
+  b.disabled = false;
+  b.textContent = v.on ? "음성 끄기" : "음성 켜기";
+  b.className = "btn" + (v.on ? " go" : "");
+
+  const sel = $("voicePick");
+  if (sel && sel.dataset.n !== String(voiceList.length)) {
+    sel.dataset.n = String(voiceList.length);
+    sel.innerHTML = "";
+    const ko = koVoices();
+    if (!ko.length) {
+      sel.innerHTML = `<option value="">한국어 목소리 없음 — 기본 목소리 사용</option>`;
+    } else {
+      for (const x of ko) {
+        const o = document.createElement("option");
+        o.value = x.voiceURI; o.textContent = x.name;
+        sel.appendChild(o);
+      }
+      sel.value = v.uri || ko[0].voiceURI;
+    }
+  }
+  $("voiceRate").value = v.rate;
+  $("voiceMax").value = v.maxPerDay;
+  $("quietFrom").value = v.quietFrom;
+  $("quietTo").value = v.quietTo;
+
+  const used = voiceCountToday();
+  $("voiceInfo").textContent = v.on
+    ? `오늘 ${used}/${v.maxPerDay}번 말했습니다.` +
+      (inQuietHours(v) ? " 지금은 조용한 시간이라 말하지 않습니다." : "") +
+      " 앱이 열려 있을 때만 소리가 납니다."
+    : "꺼져 있습니다. 켜려면 한 번 눌러 주세요(브라우저가 그때 소리를 허용합니다).";
+}
+
 function renderSettings() {
   $("sOwner").value = conn.owner;
   $("sRepo").value = conn.repo;
@@ -1452,6 +1726,7 @@ function renderSettings() {
     : `남은 요청 ${r.remaining}회${r.reset ? ` · ${new Date(r.reset).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}에 회복` : ""}`;
   paintNotify();
   paintGeoSettings();
+  paintVoiceSettings();
 }
 
 /** 헤더의 아이 선택 버튼 */
@@ -1484,7 +1759,8 @@ function renderKidBar() {
 
 function render() {
   renderKidBar();
-  renderHeader(); renderToday(); renderOwn(); renderReflect(); renderWeek(); renderEdit(); renderSettings();
+  renderHeader(); renderProgress(); renderToday(); renderOwn(); renderReflect();
+  renderWeek(); renderEdit(); renderSettings();
 }
 
 /* APK(Capacitor)에서만 동작. 웹에서는 NativeAlarms 가 없거나 available=false 라 건너뜁니다.
@@ -1550,7 +1826,7 @@ let lastDayKey = "";
 function tick() {
   const now = nowDate(), key = ymd(now);
   if (key !== lastDayKey) {
-    lastDayKey = key; firedMap = {}; recCache = null;
+    lastDayKey = key; firedMap = {}; recCache = null; saidToday.clear();
     loadDay(true).then(render);
     return;
   }
@@ -1561,7 +1837,12 @@ function tick() {
     Object.values(d.own || {}).some(o => o && o.state === "running"));
   if (anyRunning) { renderToday(); renderOwn(); }
 
-  if (!notifyOn || !("Notification" in window) || Notification.permission !== "granted") return;
+  // 화면 알림과 음성은 따로 켤 수 있습니다.
+  // 알림 권한을 거부했어도 음성만으로 쓸 수 있어야 합니다.
+  const wantNotify = notifyOn && ("Notification" in window) && Notification.permission === "granted";
+  const wantVoice = hasTTS() && voiceCfg().on;
+  if (!wantNotify && !wantVoice) return;
+
   const nm = nowMin(), before = sched.notifyBeforeMin;
   for (const e of eventsOn(now)) {
     const tracked = e.track !== false;
@@ -1572,7 +1853,8 @@ function tick() {
       const diff0 = mins(e.start) - nm;
       if (before > 0 && diff0 <= before && diff0 > 0 && !firedMap[e.id + "|pre"]) {
         firedMap[e.id + "|pre"] = 1;
-        notify(`${k.emoji} ${human(diff0)} 뒤 ${e.title}`, `${e.start} 시작${e.place ? " · " + e.place : ""}`);
+        if (wantVoice) sayOnce(e.id + "|pre", sayPre(e.title, Math.max(1, Math.round(diff0))));
+        if (wantNotify) notify(`${k.emoji} ${human(diff0)} 뒤 ${e.title}`, `${e.start} 시작${e.place ? " · " + e.place : ""}`);
       }
       continue;
     }
@@ -1580,18 +1862,21 @@ function tick() {
       const diff = mins(e.start) - nm;
       if (before > 0 && diff <= before && diff > 0 && !firedMap[e.id + "|pre"]) {
         firedMap[e.id + "|pre"] = 1;
-        notify(`${who === "all" ? kidTag(e) + " · " : ""}${k.emoji} ${human(diff)} 뒤 ${e.title}`, tracked ? `${e.start} 시작 · 제한 ${limitOf(e)}분` : `${e.start} 시작${e.place ? " · " + e.place : ""}`);
+        if (wantVoice) sayOnce(e.id + "|pre", sayPre(e.title, Math.max(1, Math.round(diff))));
+        if (wantNotify) notify(`${who === "all" ? kidTag(e) + " · " : ""}${k.emoji} ${human(diff)} 뒤 ${e.title}`, tracked ? `${e.start} 시작 · 제한 ${limitOf(e)}분` : `${e.start} 시작${e.place ? " · " + e.place : ""}`);
       }
       if (diff <= 0 && diff > -1.5 && !firedMap[e.id + "|now"]) {
         firedMap[e.id + "|now"] = 1;
-        notify(`${who === "all" ? kidTag(e) + " · " : ""}${k.emoji} ${e.title} 시작!`, tracked ? `제한 ${limitOf(e)}분 · 시작 버튼을 눌러 주세요` : (e.place || "지금 시작할 시간이에요"));
+        if (wantVoice) sayOnce(e.id + "|now", sayStart(e.title));
+        if (wantNotify) notify(`${who === "all" ? kidTag(e) + " · " : ""}${k.emoji} ${e.title} 시작!`, tracked ? `제한 ${limitOf(e)}분 · 시작 버튼을 눌러 주세요` : (e.place || "지금 시작할 시간이에요"));
       }
     }
     if (st === "running") {
       const el = elapsedOf(rec), lim = rec.limitMin || limitOf(e);
       if (el > lim && !firedMap[e.id + "|over"]) {
         firedMap[e.id + "|over"] = 1;
-        notify(`⏰ ${who === "all" ? kidTag(e) + " " : ""}${e.title} 제한시간 초과`, `${lim}분이 지났어요. 지금 ${human(el)} 경과`);
+        if (wantVoice) sayOnce(e.id + "|over", sayOver(e.title));
+        if (wantNotify) notify(`⏰ ${who === "all" ? kidTag(e) + " " : ""}${e.title} 제한시간 초과`, `${lim}분이 지났어요. 지금 ${human(el)} 경과`);
       }
     }
   }
@@ -1821,6 +2106,42 @@ function wire() {
     if (formGeo) { formGeo.radius = v; paintFormGeo(); }
   });
 
+  // ---- 설정: 음성 ----
+  $("voiceToggle").addEventListener("click", () => {
+    const v = voiceCfg();
+    v.on = !v.on;
+    writeLS(LS_VOICE, v);
+    // 켜는 순간이 사용자의 조작이므로, 여기서 한 번 말해 브라우저의 소리 허용을 받아 둡니다.
+    if (v.on) speak("음성 알림을 켰어요. 일정 시간이 되면 알려 줄게요", true);
+    paintVoiceSettings();
+    toast(v.on ? "음성 알림을 켰습니다" : "음성 알림을 껐습니다");
+  });
+  $("voiceTest").addEventListener("click", () => {
+    const sample = (eventsOn(nowDate(), oneKid())[0] || {}).title || "숙제";
+    if (!speak(sayStart(sample), true)) toast("소리를 낼 수 없습니다. 기기 음량과 무음 모드를 확인하세요.");
+  });
+  $("voicePick").addEventListener("change", e => {
+    const v = voiceCfg(); v.uri = e.target.value; writeLS(LS_VOICE, v);
+    speak("이 목소리로 말할게요", true);
+  });
+  $("voiceRate").addEventListener("change", e => {
+    const v = voiceCfg();
+    v.rate = Math.max(0.6, Math.min(1.4, Number(e.target.value) || 0.95));
+    e.target.value = v.rate; writeLS(LS_VOICE, v);
+    speak("이 빠르기로 말할게요", true);
+  });
+  $("voiceMax").addEventListener("change", e => {
+    const v = voiceCfg();
+    v.maxPerDay = Math.max(1, Math.min(30, Number(e.target.value) || 8));
+    e.target.value = v.maxPerDay; writeLS(LS_VOICE, v); paintVoiceSettings();
+  });
+  for (const [id, key] of [["quietFrom", "quietFrom"], ["quietTo", "quietTo"]]) {
+    $(id).addEventListener("change", e => {
+      const v = voiceCfg(); v[key] = e.target.value || v[key];
+      writeLS(LS_VOICE, v); paintVoiceSettings();
+    });
+  }
+
   // ---- 설정: 장소 확인 켜기/끄기 ----
   $("geoToggle").addEventListener("click", async () => {
     if (geoOn()) { writeLS(LS_GEO, false); paintGeoSettings(); toast("장소 확인을 껐습니다"); return; }
@@ -1968,6 +2289,7 @@ function wire() {
 /* ===================== 시작 ===================== */
 async function boot() {
   wire();
+  loadVoices();
   await loadConfig();
   await loadHolidays();
   await loadSchedule();

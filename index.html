@@ -49,6 +49,38 @@
       <button class="btn small" id="notifyBtn">알림 켜기</button>
     </div>
     <ul class="tl" id="timeline"></ul>
+
+    <!-- 자기주도: 아이가 스스로 정한 것 -->
+    <section class="panel own hidden" id="ownBox">
+      <h2>🌱 내가 정한 것 <span class="cntbadge" id="ownCount"></span></h2>
+      <p class="hint">오늘 스스로 하고 싶은 걸 적어 보세요. 부모님이 짠 일정과 따로 기록됩니다.</p>
+      <form id="ownForm">
+        <div class="ownadd">
+          <input type="text" id="ownTitle" placeholder="예: 과학책 읽기" maxlength="40" required>
+          <select id="ownKind"></select>
+          <input type="number" id="ownLimit" min="1" max="600" placeholder="분">
+          <button class="btn primary" type="submit">추가</button>
+        </div>
+      </form>
+      <ul class="list" id="ownList"></ul>
+    </section>
+
+    <!-- 자기주도: 하루 돌아보기 -->
+    <section class="panel hidden" id="reflectBox">
+      <h2>오늘 돌아보기</h2>
+      <div class="stars" id="starRow">
+        <button type="button" data-v="1">☆</button>
+        <button type="button" data-v="2">☆</button>
+        <button type="button" data-v="3">☆</button>
+        <button type="button" data-v="4">☆</button>
+        <button type="button" data-v="5">☆</button>
+        <span id="rWord"></span>
+      </div>
+      <div class="row two" style="margin-top:12px">
+        <div><label for="rGood">오늘 잘한 것</label><input type="text" id="rGood" maxlength="80" placeholder="한 줄로"></div>
+        <div><label for="rNext">내일 해볼 것</label><input type="text" id="rNext" maxlength="80" placeholder="한 줄로"></div>
+      </div>
+    </section>
   </section>
 
   <!-- ===== 이번 주 ===== -->
@@ -58,8 +90,21 @@
 
   <!-- ===== 기록 ===== -->
   <section id="tab-rec" class="hidden">
-    <div class="btns" style="margin-bottom:14px">
-      <button class="btn small" id="recReload">다시 불러오기</button>
+    <div class="repbar">
+      <div class="seg" id="repMode" role="tablist">
+        <button type="button" role="tab" aria-selected="true"  data-mode="week">주간</button>
+        <button type="button" role="tab" aria-selected="false" data-mode="month">월간</button>
+      </div>
+      <div class="nav">
+        <button class="btn small" id="repPrev" aria-label="이전">◀</button>
+        <span id="repLabel"></span>
+        <button class="btn small" id="repNext" aria-label="다음">▶</button>
+      </div>
+      <div class="btns">
+        <button class="btn small" id="repCopy">글로 복사</button>
+        <button class="btn small" id="repSave">파일로 저장</button>
+        <button class="btn small" id="recReload">다시 불러오기</button>
+      </div>
     </div>
     <div id="recBody"></div>
   </section>
@@ -104,6 +149,14 @@
           </div>
           <div class="row">
             <div><label>매주 반복할 요일</label><div class="dows" id="fDows"></div></div>
+          </div>
+          <div class="row">
+            <div>
+              <label>무엇을 기록할까 (선택)</label>
+              <div class="dows dchips" id="fDetail"></div>
+              <p class="hint" style="margin:6px 0 0">고른 항목이 아이 화면에 입력 칸으로 뜹니다.
+                영어처럼 완료 체크만 필요하면 하나도 고르지 마세요. 종류를 <b>독서</b>로 바꾸면 자동으로 켜집니다.</p>
+            </div>
           </div>
           <div class="row">
             <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink)">

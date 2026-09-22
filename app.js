@@ -12,8 +12,25 @@ const KINDS = [
   { id: "study",   name: "공부·숙제",     color: "#F59E0B", emoji: "✏️" },
   { id: "sport",   name: "운동",          color: "#10B981", emoji: "⚽" },
   { id: "life",    name: "생활",          color: "#EC4899", emoji: "🪥" },
-  { id: "play",    name: "놀이·쉬는 시간", color: "#06B6D4", emoji: "🎮" }
+  { id: "play",    name: "놀이·쉬는 시간", color: "#06B6D4", emoji: "🎮" },
+  { id: "read",    name: "독서",          color: "#14B8A6", emoji: "📖" }
 ];
+
+/* 일정마다 "무엇을 기록할지" 고르는 항목들.
+   영어 숙제는 체크만, 수학은 페이지·채점·오답, 독서는 책 제목 — 이런 식으로 씁니다. */
+const DETAIL_FIELDS = [
+  { id: "pages",  label: "페이지",         type: "range" },   // 몇 쪽 ~ 몇 쪽
+  { id: "graded", label: "채점",           type: "bool"  },
+  { id: "redo",   label: "오답 다시 풀기", type: "bool"  },
+  { id: "book",   label: "읽은 책",        type: "text", placeholder: "책 제목" },
+  { id: "listen", label: "듣기",           type: "bool"  },
+  { id: "speak",  label: "낭독",           type: "bool"  },
+  { id: "words",  label: "단어",           type: "num", unit: "개" },
+  { id: "memo",   label: "메모",           type: "text", placeholder: "한 줄" }
+];
+const detailById = id => DETAIL_FIELDS.find(f => f.id === id);
+/** 기본 세부 항목 — 종류만 고르면 알아서 붙습니다 */
+const DEFAULT_DETAIL = { read: ["book", "pages"], study: [] };
 const kindOf = id => KINDS.find(k => k.id === id) || KINDS[0];
 
 const STATE_LABEL = {
@@ -43,6 +60,7 @@ let dayKey = "";             // 오늘 YYYY-MM-DD
 let who = "";                // 지금 보고 있는 아이 id, 또는 "all"(부모만)
 let dayMap = {};             // 아이 id → { date, items }
 let dirtyMap = {};           // 아이 id → Set(아직 못 보낸 항목 id)
+let dirtyMeta = new Set();   // "내가 정한 것"·회고가 바뀐 아이 id
 let flushTimer = null;
 let notifyOn = false;
 let firedMap = {};
@@ -66,6 +84,21 @@ function recOf(e) {
   return (d && d.items[e.id]) || null;
 }
 function dirtyOf(id) { return dirtyMap[id] || (dirtyMap[id] = new Set()); }
+
+/* ---- 자기주도: 아이가 스스로 적는 부분 ----
+ * schedule.json(부모 소유)이 아니라 status/<아이>/<날짜>.json 에 넣습니다.
+ * 아이 토큰만으로 쓸 수 있고, 부모가 짠 일정은 손대지 않습니다. */
+function dayOf(kidId) {
+  return dayMap[kidId] || (dayMap[kidId] = { date: dayKey, items: {}, own: {}, reflect: {} });
+}
+const ownOf = kidId => (dayOf(kidId).own || (dayOf(kidId).own = {}));
+const reflectOf = kidId => (dayOf(kidId).reflect || (dayOf(kidId).reflect = {}));
+function markMeta(kidId) {
+  dirtyMeta.add(kidId);
+  syncState("busy", "저장 대기");
+  clearTimeout(flushTimer);
+  flushTimer = setTimeout(flush, 2500);
+}
 
 const role = () => (conn && conn.role) || "viewer";
 const isParent = () => role() === "parent";
@@ -192,7 +225,8 @@ function normalize(d) {
     geo: (e.geo && e.geo.lat != null && e.geo.lng != null)
       ? { lat: Number(e.geo.lat), lng: Number(e.geo.lng), radius: Number(e.geo.radius) || 300 }
       : null,
-    kid: okKid(e.kid)
+    kid: okKid(e.kid),
+    detail: Array.isArray(e.detail) ? e.detail.filter(detailById) : []
   });
   o.weekly = (o.weekly || []).map(e => Object.assign(fix(e), { day: Number(e.day), off: e.off || [] }))
     .filter(e => e.start && e.title && e.day >= 0 && e.day <= 6);
@@ -376,10 +410,19 @@ function recCacheStale() { return true; }
 
 /** 원격 기록을 받되, 아직 못 보낸 로컬 변경(dirty)은 지키고 합칩니다. */
 function mergeDay(kidId, remote, key) {
-  const base = { date: key, updatedAt: null, items: {} };
-  if (remote && remote.date === key && remote.items) Object.assign(base.items, remote.items);
+  const base = { date: key, updatedAt: null, items: {}, own: {}, reflect: {} };
+  if (remote && remote.date === key) {
+    Object.assign(base.items, remote.items || {});
+    Object.assign(base.own, remote.own || {});
+    Object.assign(base.reflect, remote.reflect || {});
+  }
   if (remote) base.updatedAt = remote.updatedAt || null;
   const local = dayMap[kidId];
+  // 아직 못 보낸 내 기록이 있으면 원격보다 우선합니다.
+  if (dirtyMeta.has(kidId) && local) {
+    base.own = local.own || {};
+    base.reflect = local.reflect || {};
+  }
   for (const id of dirtyOf(kidId)) {
     const v = local ? local.items[id] : undefined;
     if (v === undefined || v === null) delete base.items[id];
@@ -397,14 +440,16 @@ function markDirty(kidId, id) {
 }
 async function flush() {
   clearTimeout(flushTimer);
-  const pending = Object.keys(dirtyMap).filter(k => dirtyMap[k].size);
+  const pending = [...new Set(
+    Object.keys(dirtyMap).filter(k => dirtyMap[k].size).concat([...dirtyMeta])
+  )];
   if (!pending.length) return;
   if (!canWrite()) { syncState("err", "토큰이 없어 저장소에 못 씁니다"); return; }
 
   syncState("busy", "저장 중");
   let failed = null;
   for (const kidId of pending) {
-    const ids = [...dirtyMap[kidId]];
+    const ids = [...(dirtyMap[kidId] || [])];
     const cur = dayMap[kidId] || { date: dayKey, items: {} };
     const snap = new Map(ids.map(id => [id, cur.items[id] ?? null]));
     try {
@@ -412,12 +457,17 @@ async function flush() {
         const base = (remote && remote.date === dayKey && remote.items) ? remote : { date: dayKey, items: {} };
         base.items = base.items || {};
         for (const [id, v] of snap) { if (v === null) delete base.items[id]; else base.items[id] = v; }
+        if (dirtyMeta.has(kidId)) {
+          base.own = cur.own || {};
+          base.reflect = cur.reflect || {};
+        }
         base.kid = kidId;
         base.name = (kidById(kidId) || {}).name || "";
         base.updatedAt = new Date().toISOString();
         return base;
       }, `chore(status): ${(kidById(kidId) || {}).name || kidId} ${dayKey} 진행 기록`);
-      ids.forEach(id => dirtyMap[kidId].delete(id));
+      ids.forEach(id => dirtyMap[kidId] && dirtyMap[kidId].delete(id));
+      dirtyMeta.delete(kidId);
       if (r.data) dayMap[kidId] = mergeDay(kidId, r.data, dayKey);
     } catch (e) { failed = e.message; }
   }
@@ -459,7 +509,9 @@ function completeTask(e) {
   const doneAt = nowDate().toISOString();
   const el = prev && prev.startedAt ? (new Date(doneAt) - new Date(prev.startedAt)) / 60000 : null;
   const over = el != null && el > lim;
+  // 이미 적어 둔 세부 기록과 시작 시점 장소 판정을 그대로 가져갑니다.
   setRec(e, {
+    ...(prev || {}),
     state: over ? "over" : "done",
     startedAt: prev ? prev.startedAt : null,
     doneAt,
@@ -486,6 +538,107 @@ function applySpot(e, field) {
 }
 
 function undoTask(e) { setRec(e, null); global_NA()?.disarmLimit(e); toast("되돌렸습니다"); }
+
+/* ===================== 자기주도: 내가 정한 것 ===================== */
+function ownAdd(kidId, title, limitMin, kind) {
+  const id = "own_" + uid();
+  ownOf(kidId)[id] = {
+    id, title, kind: kind || "study",
+    limitMin: limitMin || null,
+    state: "todo", startedAt: null, doneAt: null, elapsedMin: null,
+    madeAt: nowDate().toISOString()
+  };
+  markMeta(kidId); render();
+}
+function ownSet(kidId, id, patch) {
+  const o = ownOf(kidId)[id]; if (!o) return;
+  Object.assign(o, patch); markMeta(kidId); render();
+}
+function ownStart(kidId, id) {
+  ownSet(kidId, id, { state: "running", startedAt: nowDate().toISOString() });
+}
+function ownDone(kidId, id) {
+  const o = ownOf(kidId)[id]; if (!o) return;
+  const doneAt = nowDate().toISOString();
+  const el = o.startedAt ? (new Date(doneAt) - new Date(o.startedAt)) / 60000 : null;
+  const over = el != null && o.limitMin && el > o.limitMin;
+  ownSet(kidId, id, {
+    state: over ? "over" : "done", doneAt,
+    elapsedMin: el == null ? null : Math.round(el)
+  });
+  toast(el == null ? `${o.title} 완료!` : `${o.title} 완료 — ${human(el)}`);
+}
+function ownDel(kidId, id) {
+  delete ownOf(kidId)[id]; markMeta(kidId); render();
+}
+
+function renderOwn() {
+  const host = $("ownBox");
+  if (!host) return;
+  const kid = oneKid();
+  // "모두" 화면에서는 누구 것인지 모호하므로 숨깁니다.
+  host.classList.toggle("hidden", !kid || !canWrite());
+  if (!kid || !canWrite()) return;
+
+  const list = Object.values(ownOf(kid)).sort((a, b) => (a.madeAt || "").localeCompare(b.madeAt || ""));
+  const ul = $("ownList");
+  ul.innerHTML = "";
+  $("ownCount").textContent = list.length ? `${list.filter(o => ["done", "over"].includes(o.state)).length}/${list.length}` : "";
+
+  if (!list.length) {
+    ul.innerHTML = `<li class="ownempty">오늘 스스로 하고 싶은 걸 적어 보세요. 부모님 일정과 따로 기록됩니다.</li>`;
+    return;
+  }
+  for (const o of list) {
+    const k = kindOf(o.kind);
+    const done = ["done", "over"].includes(o.state);
+    const el = o.state === "running" && o.startedAt
+      ? (nowDate() - new Date(o.startedAt)) / 60000
+      : o.elapsedMin;
+
+    const li = document.createElement("li");
+    li.className = "ownrow" + (done ? " done" : "");
+    li.innerHTML = `<span class="emoji">${k.emoji}</span>
+      <span class="meta"><b></b><span class="sub"></span></span>
+      <span class="acts"></span>`;
+    li.querySelector("b").textContent = o.title;
+    li.querySelector(".sub").textContent = [
+      o.limitMin ? `제한 ${o.limitMin}분` : null,
+      el != null ? `${human(el)} ${done ? "걸림" : "경과"}` : null,
+      o.state === "over" ? "시간 초과" : null
+    ].filter(Boolean).join(" · ") || "아직 시작 안 함";
+
+    const acts = li.querySelector(".acts");
+    const add = (t, cls, fn) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn small " + cls; b.textContent = t;
+      b.addEventListener("click", fn); acts.appendChild(b);
+    };
+    if (o.state === "todo") { add("시작", "go", () => ownStart(kid, o.id)); add("완료", "", () => ownDone(kid, o.id)); }
+    else if (o.state === "running") { add("완료", "primary", () => ownDone(kid, o.id)); }
+    else add("되돌리기", "", () => ownSet(kid, o.id, { state: "todo", startedAt: null, doneAt: null, elapsedMin: null }));
+    add("✕", "danger", () => { if (confirm(`${withEul(o.title)} 지울까요?`)) ownDel(kid, o.id); });
+    ul.appendChild(li);
+  }
+}
+
+/* ===================== 자기주도: 하루 돌아보기 ===================== */
+function renderReflect() {
+  const host = $("reflectBox");
+  if (!host) return;
+  const kid = oneKid();
+  host.classList.toggle("hidden", !kid || !canWrite());
+  if (!kid || !canWrite()) return;
+
+  const R = reflectOf(kid);
+  document.querySelectorAll("#starRow button").forEach(b => {
+    b.textContent = Number(b.dataset.v) <= (R.rating || 0) ? "★" : "☆";
+    b.classList.toggle("on", Number(b.dataset.v) <= (R.rating || 0));
+  });
+  $("rWord").textContent = ["", "힘들었어", "그럭저럭", "괜찮았어", "잘했어", "최고였어"][R.rating || 0] || "오늘 어땠나요?";
+  if (document.activeElement !== $("rGood")) $("rGood").value = R.good || "";
+  if (document.activeElement !== $("rNext")) $("rNext").value = R.next || "";
+}
 
 /* ===================== 렌더 ===================== */
 function renderHeader() {
@@ -587,6 +740,90 @@ function plainRow(e, nm, clash) {
   return li;
 }
 
+/**
+ * 세부 기록 입력 상자. 값이 바뀌면 기록에 바로 반영합니다.
+ * 화면을 다시 그리면 입력 중 포커스가 날아가므로 여기서는 render() 를 부르지 않습니다.
+ */
+function detailBox(e, rec) {
+  const wrap = document.createElement("div");
+  wrap.className = "detail";
+  rec.detail = rec.detail || {};
+  const D = rec.detail;
+
+  const save = () => { markDirty(e.kid, e.id); };
+
+  for (const id of e.detail) {
+    const f = detailById(id);
+    if (!f) continue;
+    const row = document.createElement("div");
+    row.className = "drow";
+
+    if (f.type === "bool") {
+      const lab = document.createElement("label");
+      lab.className = "dbool";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = !!D[id];
+      cb.addEventListener("change", () => { D[id] = cb.checked; save(); });
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(f.label));
+      row.appendChild(lab);
+
+    } else if (f.type === "range") {
+      row.innerHTML = `<span class="dlabel">${f.label}</span>`;
+      const a = document.createElement("input"), b = document.createElement("input");
+      for (const [el, idx, ph] of [[a, 0, "부터"], [b, 1, "까지"]]) {
+        el.type = "number"; el.min = "0"; el.max = "9999"; el.placeholder = ph;
+        el.className = "dnum";
+        el.value = (D[id] && D[id][idx] != null) ? D[id][idx] : "";
+        el.addEventListener("change", () => {
+          const cur = Array.isArray(D[id]) ? [...D[id]] : [null, null];
+          cur[idx] = el.value === "" ? null : Number(el.value);
+          D[id] = (cur[0] == null && cur[1] == null) ? null : cur;
+          save();
+        });
+      }
+      row.appendChild(a);
+      row.insertAdjacentHTML("beforeend", `<span class="dtil">~</span>`);
+      row.appendChild(b);
+      row.insertAdjacentHTML("beforeend", `<span class="dunit">쪽</span>`);
+
+    } else if (f.type === "num") {
+      row.innerHTML = `<span class="dlabel">${f.label}</span>`;
+      const el = document.createElement("input");
+      el.type = "number"; el.min = "0"; el.max = "9999"; el.className = "dnum";
+      el.value = D[id] != null ? D[id] : "";
+      el.addEventListener("change", () => { D[id] = el.value === "" ? null : Number(el.value); save(); });
+      row.appendChild(el);
+      row.insertAdjacentHTML("beforeend", `<span class="dunit">${f.unit || ""}</span>`);
+
+    } else {
+      row.innerHTML = `<span class="dlabel">${f.label}</span>`;
+      const t = document.createElement("input");
+      t.type = "text"; t.placeholder = f.placeholder || ""; t.className = "dtext";
+      t.value = D[id] || "";
+      t.addEventListener("change", () => { D[id] = t.value.trim() || null; save(); });
+      row.appendChild(t);
+    }
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+/** 기록된 세부 내용을 한 줄로 */
+function detailSummary(e, rec) {
+  const D = (rec && rec.detail) || {};
+  const out = [];
+  for (const id of (e.detail || [])) {
+    const f = detailById(id); if (!f) continue;
+    const v = D[id];
+    if (f.type === "bool") { if (v) out.push(`${f.label} ✓`); }
+    else if (f.type === "range") { if (Array.isArray(v) && (v[0] != null || v[1] != null)) out.push(`${v[0] ?? ""}~${v[1] ?? ""}쪽`); }
+    else if (f.type === "num") { if (v != null) out.push(`${f.label} ${v}${f.unit || ""}`); }
+    else if (v) out.push(`${f.label}: ${v}`);
+  }
+  return out.join(" · ");
+}
+
 /** "겹침" 안내 한 줄 */
 function clashLine(names) {
   const p = document.createElement("p");
@@ -629,6 +866,15 @@ function eventRow(e, nm, clash) {
   li.querySelector(".sub").textContent =
     [who === "all" ? kidTag(e) : "", k.name, e.place, `제한 ${lim}분`].filter(Boolean).join(" · ");
 
+  // 기록해 둔 세부 내용 한 줄 (완료된 뒤에도 보이게)
+  const dsum = detailSummary(e, rec);
+  if (dsum && ["done", "over"].includes(st)) {
+    const p = document.createElement("div");
+    p.className = "dsum";
+    p.textContent = "📝 " + dsum;
+    li.querySelector(".body").appendChild(p);
+  }
+
   // 장소 확인 결과 — 좌표가 아니라 판정 결과만 표시합니다
   const spot = rec && (rec.atDone || rec.atStart);
   if (spot) {
@@ -654,6 +900,11 @@ function eventRow(e, nm, clash) {
   }
 
   if (clash && clash.length) li.querySelector(".slot").appendChild(clashLine(clash));
+
+  // 세부 기록 — 시작했거나 끝낸 일정에만 띄웁니다
+  if (canWrite() && (e.detail || []).length && rec && ["running", "done", "over"].includes(st)) {
+    li.querySelector(".slot").appendChild(detailBox(e, rec));
+  }
 
   // 버튼
   const acts = li.querySelector(".acts");
@@ -717,91 +968,287 @@ function renderWeek() {
   }
 }
 
-/* ---- 기록 ---- */
+/* ---- 기록: 주간·월간 리포트 ---- */
+/*
+ * 상태 파일을 날짜마다 하나씩 읽습니다. 월간이면 최대 31번이라
+ * 순차로 돌면 느려서, 6개씩 묶어 병렬로 가져오고 읽은 것은 캐시해 둡니다.
+ */
+let repMode = "week";      // week | month
+let repOffset = 0;         // 0 = 이번, -1 = 지난
+const statusCache = new Map();   // "kid|날짜" → data | null
+
+/** 리포트가 덮는 날짜 범위 */
+function repRange() {
+  const now = nowDate();
+  if (repMode === "week") {
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - ((now.getDay() + 6) % 7) + repOffset * 7);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { from: mon, to: sun, label: `${mon.getMonth() + 1}.${mon.getDate()} ~ ${sun.getMonth() + 1}.${sun.getDate()}` };
+  }
+  const first = new Date(now.getFullYear(), now.getMonth() + repOffset, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  return { from: first, to: last, label: `${first.getFullYear()}년 ${first.getMonth() + 1}월` };
+}
+function datesIn(from, to) {
+  const out = [], d = new Date(from);
+  while (d <= to) { out.push(ymd(d)); d.setDate(d.getDate() + 1); }
+  return out;
+}
+
+/** 여러 날짜의 상태 파일을 6개씩 병렬로 가져옵니다. */
+async function loadStatusRange(kidId, dates, force) {
+  const need = dates.filter(k => force || !statusCache.has(kidId + "|" + k));
+  for (let i = 0; i < need.length; i += 6) {
+    const batch = need.slice(i, i + 6);
+    await Promise.all(batch.map(async key => {
+      try {
+        const r = statusRepo.authed
+          ? await statusRepo.readJson(statusPath(kidId, key))
+          : await statusRepo.readJsonPublic(statusPath(kidId, key));
+        statusCache.set(kidId + "|" + key, r.missing ? null : r.data);
+      } catch (e) { statusCache.set(kidId + "|" + key, null); }
+    }));
+  }
+  return dates.map(key => ({ key, data: statusCache.get(kidId + "|" + key) || null }));
+}
+
 async function renderRecords(force) {
   const box = $("recBody");
   if (!oneKid()) {
-    box.innerHTML = `<div class="empty"><strong>아이를 한 명 골라 주세요</strong>기록은 한 명씩 봅니다.</div>`;
+    box.innerHTML = `<div class="empty"><strong>아이를 한 명 골라 주세요</strong>리포트는 한 명씩 봅니다.</div>`;
+    $("repLabel").textContent = "";
     return;
   }
-  if (recCache && recCache.kid === who && !force) { paintRecords(recCache.rows); return; }
-  box.innerHTML = `<p class="hint">최근 7일 기록을 불러오는 중…</p>`;
-  const days = [];
-  for (let i = 0; i < 7; i++) { const d = nowDate(); d.setDate(d.getDate() - i); days.push(ymd(d)); }
-  const out = [];
-  for (const key of days) {
-    try {
-      const r = statusRepo.authed
-        ? await statusRepo.readJson(statusPath(who, key))
-        : await statusRepo.readJsonPublic(statusPath(who, key));
-      out.push({ key, data: r.missing ? null : r.data });
-    } catch (e) { out.push({ key, data: null, error: e.message }); }
-  }
-  recCache = { kid: who, rows: out };
-  paintRecords(out);
-}
-function paintRecords(rows) {
-  const idx = {};
-  for (const e of sched.weekly.concat(sched.once)) if (e.kid === who) idx[e.id] = e;
+  const { from, to, label } = repRange();
+  $("repLabel").textContent = label;
+  document.querySelectorAll("#repMode button").forEach(b =>
+    b.setAttribute("aria-selected", String(b.dataset.mode === repMode)));
 
-  let total = 0, done = 0, over = 0;
-  const per = {};
-  const dayRows = [];
+  const dates = datesIn(from, to);
+  box.innerHTML = `<p class="hint">${label} 기록을 불러오는 중… (${dates.length}일)</p>`;
+  const rows = await loadStatusRange(who, dates, force);
+  paintReport(buildReport(rows), label);
+}
+
+/** 사용자가 적은 글자를 HTML 에 넣기 전에 막아 둡니다 */
+function esc(t) {
+  return String(t).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/** 날짜별 원자료를 리포트용 숫자로 정리합니다. */
+function buildReport(rows) {
+  const R = {
+    days: [], total: 0, done: 0, over: 0, missed: 0,
+    per: {},          // 일정별
+    books: [],        // 읽은 책
+    own: { total: 0, done: 0, list: [] },   // 스스로 정한 것
+    reflects: [],                            // 하루 돌아보기
+    sums: { pages: 0, graded: 0, gradedOf: 0, redo: 0, listen: 0, speak: 0, words: 0, memo: [] },
+    elapsed: 0, elapsedN: 0
+  };
 
   for (const { key, data } of rows) {
     const d = new Date(key + "T12:00:00");
     const planned = eventsOn(d, who).filter(e => e.track !== false);
     const items = (data && data.items) || {};
     let dDone = 0, dOver = 0;
-    for (const e of planned) {
-      total++;
-      const r = items[e.id];
-      if (r && (r.state === "done" || r.state === "over")) {
-        done++; dDone++;
-        if (r.state === "over") { over++; dOver++; }
-        if (r.elapsedMin != null) {
-          per[e.id] = per[e.id] || { title: e.title, n: 0, sum: 0, over: 0, limit: r.limitMin || limitOf(e) };
-          per[e.id].n++; per[e.id].sum += r.elapsedMin;
-          if (r.state === "over") per[e.id].over++;
-        }
-      }
-    }
-    dayRows.push({ key, dow: DOW[d.getDay()], planned: planned.length, done: dDone, over: dOver });
-  }
 
-  const rate = total ? Math.round((done / total) * 100) : 0;
-  let html = `<div class="stats">
-      <div class="stat"><b>${rate}%</b><span>7일 완료율</span></div>
-      <div class="stat"><b>${done}/${total}</b><span>완료 / 계획</span></div>
-      <div class="stat"><b>${over}</b><span>제한시간 초과</span></div>
+    for (const e of planned) {
+      R.total++;
+      const r = items[e.id];
+      // 같은 이름의 일정은 요일마다 id 가 달라도 한 줄로 묶습니다.
+      const gk = e.kind + "|" + e.title;
+      const p = R.per[gk] || (R.per[gk] = { title: e.title, kind: e.kind, plan: 0, done: 0, over: 0, sum: 0, n: 0, limit: limitOf(e) });
+      p.limit = Math.max(p.limit, limitOf(e));
+      p.plan++;
+      if (r && (r.state === "done" || r.state === "over")) {
+        R.done++; dDone++; p.done++;
+        if (r.state === "over") { R.over++; dOver++; p.over++; }
+        if (r.elapsedMin != null) { p.sum += r.elapsedMin; p.n++; R.elapsed += r.elapsedMin; R.elapsedN++; }
+
+        const D = r.detail || {};
+        if (D.book) R.books.push({ key, title: D.book, pages: D.pages || null });
+        if (Array.isArray(D.pages) && D.pages[0] != null && D.pages[1] != null)
+          R.sums.pages += Math.max(0, D.pages[1] - D.pages[0] + 1);
+        if (D.graded != null) { R.sums.gradedOf++; if (D.graded) R.sums.graded++; }
+        if (D.redo) R.sums.redo++;
+        if (D.listen) R.sums.listen++;
+        if (D.speak) R.sums.speak++;
+        if (typeof D.words === "number") R.sums.words += D.words;
+        if (D.memo) R.sums.memo.push({ key, what: e.title, text: D.memo });
+      } else if (r && r.state === "missed") { R.missed++; }
+    }
+    // 스스로 정한 것
+    for (const o of Object.values((data && data.own) || {})) {
+      R.own.total++;
+      const ok = ["done", "over"].includes(o.state);
+      if (ok) R.own.done++;
+      R.own.list.push({ key, title: o.title, kind: o.kind, done: ok, elapsedMin: o.elapsedMin, limitMin: o.limitMin });
+    }
+    const rf = (data && data.reflect) || {};
+    if (rf.rating || rf.good || rf.next) R.reflects.push({ key, ...rf });
+
+    R.days.push({ key, dow: DOW[d.getDay()], holiday: holidayOn(key), plan: planned.length, done: dDone, over: dOver });
+  }
+  return R;
+}
+
+function bar(pct, cls) {
+  return `<span class="mini"><i class="${cls || ""}" style="width:${Math.min(100, pct)}%"></i></span>`;
+}
+
+function paintReport(R, label) {
+  const rate = R.total ? Math.round((R.done / R.total) * 100) : 0;
+  const avg = R.elapsedN ? Math.round(R.elapsed / R.elapsedN) : null;
+
+  let h = `<div class="stats">
+      <div class="stat"><b>${rate}%</b><span>완료율</span></div>
+      <div class="stat"><b>${R.done}/${R.total}</b><span>완료 / 계획</span></div>
+      <div class="stat"><b>${R.over}</b><span>제한시간 초과</span></div>
     </div>`;
 
-  html += `<div class="panel"><h2>날짜별</h2><table class="rec"><thead><tr>
-      <th>날짜</th><th>요일</th><th class="num">계획</th><th class="num">완료</th><th class="num">초과</th></tr></thead><tbody>`;
-  for (const r of dayRows) {
-    html += `<tr><td>${r.key.slice(5)}</td><td>${r.dow}</td>
-      <td class="num">${r.planned}</td><td class="num">${r.done}</td>
-      <td class="num${r.over ? " over" : ""}">${r.over || "—"}</td></tr>`;
+  // 일별 추이
+  h += `<div class="panel"><h2>${repMode === "week" ? "요일별" : "날짜별"}</h2><table class="rec"><thead><tr>
+      <th>날짜</th><th></th><th class="num">완료</th><th class="num">계획</th><th></th></tr></thead><tbody>`;
+  for (const d of R.days) {
+    const pct = d.plan ? (d.done / d.plan) * 100 : 0;
+    h += `<tr><td>${d.key.slice(5)}</td><td>${d.dow}${d.holiday ? ` <span class="holitag">🎌</span>` : ""}</td>
+      <td class="num">${d.done}</td><td class="num">${d.plan || "—"}</td>
+      <td style="width:38%">${d.plan ? bar(pct, d.over ? "warn" : "") : ""}</td></tr>`;
   }
-  html += `</tbody></table></div>`;
+  h += `</tbody></table></div>`;
 
-  const keys = Object.keys(per);
-  html += `<div class="panel"><h2>일정별 소요시간</h2>`;
-  if (!keys.length) {
-    html += `<p class="hint">아직 "시작"을 눌러 측정한 기록이 없습니다. 시작을 눌러야 소요시간이 남습니다.</p>`;
-  } else {
-    html += `<table class="rec"><thead><tr><th>일정</th><th class="num">횟수</th>
+  // 일정별
+  const keys = Object.keys(R.per);
+  h += `<div class="panel"><h2>일정별</h2>`;
+  if (!keys.length) h += `<p class="hint">이 기간에 계획된 일정이 없습니다.</p>`;
+  else {
+    h += `<table class="rec"><thead><tr><th>일정</th><th class="num">완료/계획</th>
       <th class="num">평균</th><th class="num">제한</th><th class="num">초과</th></tr></thead><tbody>`;
     for (const id of keys) {
-      const p = per[id], avg = Math.round(p.sum / p.n);
-      html += `<tr><td>${p.title}</td><td class="num">${p.n}</td>
-        <td class="num${avg > p.limit ? " over" : ""}">${avg}분</td>
-        <td class="num">${p.limit}분</td><td class="num${p.over ? " over" : ""}">${p.over || "—"}</td></tr>`;
+      const p = R.per[id], a = p.n ? Math.round(p.sum / p.n) : null;
+      h += `<tr><td>${kindOf(p.kind).emoji} ${esc(p.title)}</td>
+        <td class="num">${p.done}/${p.plan}</td>
+        <td class="num${a != null && a > p.limit ? " over" : ""}">${a != null ? a + "분" : "—"}</td>
+        <td class="num">${p.limit}분</td>
+        <td class="num${p.over ? " over" : ""}">${p.over || "—"}</td></tr>`;
     }
-    html += `</tbody></table>`;
+    h += `</tbody></table>`;
+    if (avg != null) h += `<p class="hint" style="margin:12px 0 0">"시작"을 눌러 잰 일정의 평균 소요는 ${avg}분입니다.</p>`;
   }
-  html += `</div>`;
-  $("recBody").innerHTML = html;
+  h += `</div>`;
+
+  // 스스로 정한 것 — 자기주도 정도를 보는 핵심 지표
+  h += `<div class="panel"><h2>🌱 스스로 정한 것 <span class="cntbadge">${R.own.done}/${R.own.total}</span></h2>`;
+  if (!R.own.total) h += `<p class="hint">이 기간에 아이가 직접 적은 항목이 없습니다.</p>`;
+  else {
+    const days = new Set(R.own.list.map(o => o.key)).size;
+    h += `<p class="hint">${days}일 동안 ${R.own.total}개를 스스로 정했고 ${R.own.done}개를 해냈습니다.</p>`;
+    h += `<table class="rec"><thead><tr><th>날짜</th><th>내용</th><th class="num">걸린 시간</th><th></th></tr></thead><tbody>`;
+    for (const o of R.own.list)
+      h += `<tr><td>${o.key.slice(5)}</td><td>${kindOf(o.kind).emoji} ${esc(o.title)}</td>
+        <td class="num">${o.elapsedMin != null ? o.elapsedMin + "분" : "—"}</td>
+        <td>${o.done ? "✅" : "—"}</td></tr>`;
+    h += `</tbody></table>`;
+  }
+  h += `</div>`;
+
+  // 하루 돌아보기
+  if (R.reflects.length) {
+    const avg = R.reflects.filter(r => r.rating).reduce((a, r) => a + r.rating, 0) /
+                (R.reflects.filter(r => r.rating).length || 1);
+    h += `<div class="panel"><h2>하루 돌아보기 <span class="cntbadge">평균 ${avg.toFixed(1)}점</span></h2>
+      <table class="rec"><thead><tr><th>날짜</th><th class="num">점수</th><th>잘한 것</th><th>내일 할 것</th></tr></thead><tbody>`;
+    for (const r of R.reflects)
+      h += `<tr><td>${r.key.slice(5)}</td><td class="num">${r.rating ? "★".repeat(r.rating) : "—"}</td>
+        <td>${esc(r.good || "—")}</td><td>${esc(r.next || "—")}</td></tr>`;
+    h += `</tbody></table></div>`;
+  }
+
+  // 읽은 책
+  h += `<div class="panel"><h2>읽은 책 <span class="cntbadge">${R.books.length}권</span></h2>`;
+  if (!R.books.length) h += `<p class="hint">기록이 없습니다. 독서 일정에 "읽은 책"을 켜면 제목이 쌓입니다.</p>`;
+  else {
+    h += `<table class="rec"><thead><tr><th>날짜</th><th>책</th><th class="num">쪽</th></tr></thead><tbody>`;
+    for (const b of R.books) {
+      const pg = b.pages ? `${b.pages[0] ?? ""}~${b.pages[1] ?? ""}` : "—";
+      h += `<tr><td>${b.key.slice(5)}</td><td>${esc(b.title)}</td><td class="num">${pg}</td></tr>`;
+    }
+    h += `</tbody></table>`;
+  }
+  h += `</div>`;
+
+  // 숙제 누계
+  const S = R.sums;
+  const lines = [];
+  if (S.pages) lines.push(["푼 분량", `${S.pages}쪽`]);
+  if (S.gradedOf) lines.push(["채점", `${S.graded}/${S.gradedOf}회`]);
+  if (S.redo) lines.push(["오답 다시 풀기", `${S.redo}회`]);
+  if (S.listen) lines.push(["듣기", `${S.listen}회`]);
+  if (S.speak) lines.push(["낭독", `${S.speak}회`]);
+  if (S.words) lines.push(["단어", `${S.words}개`]);
+  if (lines.length) {
+    h += `<div class="panel"><h2>숙제 누계</h2><table class="rec"><tbody>`;
+    for (const [k, v] of lines) h += `<tr><td>${k}</td><td class="num">${v}</td></tr>`;
+    h += `</tbody></table></div>`;
+  }
+  if (S.memo.length) {
+    h += `<div class="panel"><h2>메모</h2><table class="rec"><tbody>`;
+    for (const m of S.memo) h += `<tr><td>${m.key.slice(5)}</td><td>${esc(m.what)}</td><td>${esc(m.text)}</td></tr>`;
+    h += `</tbody></table></div>`;
+  }
+
+  $("recBody").innerHTML = h;
+  lastReport = { R, label };
+}
+
+let lastReport = null;
+
+/** 리포트를 그대로 붙여 넣을 수 있는 글로 만듭니다 (카톡·메일용) */
+function reportText() {
+  if (!lastReport) return "";
+  const { R, label } = lastReport;
+  const me = kidById(who) || {};
+  const rate = R.total ? Math.round((R.done / R.total) * 100) : 0;
+  const L = [`■ ${me.name} ${repMode === "week" ? "주간" : "월간"} 공부 리포트 (${label})`, ""];
+  L.push(`완료율 ${rate}%  (${R.done}/${R.total})`);
+  if (R.over) L.push(`제한시간 초과 ${R.over}회`);
+  if (R.elapsedN) L.push(`평균 소요 ${Math.round(R.elapsed / R.elapsedN)}분`);
+  L.push("");
+  L.push("[일정별]");
+  for (const id of Object.keys(R.per)) {
+    const p = R.per[id], a = p.n ? Math.round(p.sum / p.n) : null;
+    L.push(` - ${p.title}  ${p.done}/${p.plan}` +
+      (a != null ? `  평균 ${a}분 / 제한 ${p.limit}분` : "") +
+      (p.over ? `  초과 ${p.over}회` : ""));
+  }
+  if (R.own.total) {
+    L.push("", `[스스로 정한 것 ${R.own.done}/${R.own.total}]`);
+    for (const o of R.own.list)
+      L.push(` - ${o.key.slice(5)} ${o.title}${o.done ? " ✅" : ""}${o.elapsedMin != null ? ` (${o.elapsedMin}분)` : ""}`);
+  }
+  if (R.reflects.length) {
+    L.push("", "[하루 돌아보기]");
+    for (const r of R.reflects)
+      L.push(` - ${r.key.slice(5)} ${r.rating ? "★".repeat(r.rating) : ""}` +
+             (r.good ? ` 잘한 것: ${r.good}` : "") + (r.next ? ` / 내일: ${r.next}` : ""));
+  }
+  if (R.books.length) {
+    L.push("", `[읽은 책 ${R.books.length}권]`);
+    for (const b of R.books) L.push(` - ${b.key.slice(5)} ${b.title}` + (b.pages ? ` (${b.pages[0] ?? ""}~${b.pages[1] ?? ""}쪽)` : ""));
+  }
+  const S = R.sums, sum = [];
+  if (S.pages) sum.push(`푼 분량 ${S.pages}쪽`);
+  if (S.gradedOf) sum.push(`채점 ${S.graded}/${S.gradedOf}회`);
+  if (S.redo) sum.push(`오답 다시 풀기 ${S.redo}회`);
+  if (S.listen) sum.push(`듣기 ${S.listen}회`);
+  if (S.speak) sum.push(`낭독 ${S.speak}회`);
+  if (S.words) sum.push(`단어 ${S.words}개`);
+  if (sum.length) { L.push("", "[누계]"); sum.forEach(x => L.push(` - ${x}`)); }
+  if (S.memo.length) { L.push("", "[메모]"); S.memo.forEach(m => L.push(` - ${m.key.slice(5)} ${m.what}: ${m.text}`)); }
+  return L.join("\n");
 }
 
 /* ---- 일정 편집 ---- */
@@ -843,7 +1290,7 @@ function renderEdit() {
       ul.className = "list";
       for (const e of items) {
         ul.appendChild(editRow(e,
-          `${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}${e.onHoliday === "keep" ? " · 공휴일에도 진행" : ""}${e.geo ? " · 📍장소확인" : ""}`,
+          `${e.start}${e.end ? `–${e.end}` : ""} · ${e.track === false ? "체크 안 함" : "제한 " + limitOf(e) + "분"}${e.onHoliday === "keep" ? " · 공휴일에도 진행" : ""}${e.geo ? " · 📍장소확인" : ""}${(e.detail || []).length ? " · 📝" + e.detail.map(x => (detailById(x) || {}).label).join("/") : ""}`,
           "weekly", ov.get(e.id)));
       }
       sec.appendChild(ul);
@@ -896,6 +1343,7 @@ function startEdit(e, bucket) {
   $("fHoli").checked = e.onHoliday === "keep";
   formGeo = e.geo ? { ...e.geo } : null;
   paintFormGeo();
+  document.querySelectorAll("#fDetail input").forEach(i => { i.checked = (e.detail || []).includes(i.value); });
 
   $("formTitle").textContent = "일정 수정";
   $("fSubmit").textContent = "수정 저장";
@@ -912,6 +1360,7 @@ function cancelEdit(silent) {
   $("addForm").reset();
   $("fTrack").checked = true; $("fHoli").checked = false;
   formGeo = null; paintFormGeo();
+  document.querySelectorAll("#fDetail input").forEach(i => { i.checked = false; });
   $("formTitle").textContent = "일정 추가";
   $("fSubmit").textContent = "일정 추가";
   $("fCancel").classList.add("hidden");
@@ -1035,7 +1484,7 @@ function renderKidBar() {
 
 function render() {
   renderKidBar();
-  renderHeader(); renderToday(); renderWeek(); renderEdit(); renderSettings();
+  renderHeader(); renderToday(); renderOwn(); renderReflect(); renderWeek(); renderEdit(); renderSettings();
 }
 
 /* APK(Capacitor)에서만 동작. 웹에서는 NativeAlarms 가 없거나 available=false 라 건너뜁니다.
@@ -1107,7 +1556,10 @@ function tick() {
   }
   renderHeader();
   // 진행 중 항목이 있으면 진행바를 위해 오늘 목록도 다시 그림
-  if (Object.values(dayMap).some(d => Object.values(d.items || {}).some(r => r && r.state === "running"))) renderToday();
+  const anyRunning = Object.values(dayMap).some(d =>
+    Object.values(d.items || {}).some(r => r && r.state === "running") ||
+    Object.values(d.own || {}).some(o => o && o.state === "running"));
+  if (anyRunning) { renderToday(); renderOwn(); }
 
   if (!notifyOn || !("Notification" in window) || Notification.permission !== "granted") return;
   const nm = nowMin(), before = sched.notifyBeforeMin;
@@ -1215,6 +1667,52 @@ function wire() {
   // 일정 추가 폼
   const sel = $("fKind");
   for (const k of KINDS) { const o = document.createElement("option"); o.value = k.id; o.textContent = `${k.emoji} ${k.name}`; sel.appendChild(o); }
+  // "내가 정한 것" 종류 선택
+  const ok = $("ownKind");
+  for (const k of KINDS) {
+    const o = document.createElement("option");
+    o.value = k.id; o.textContent = `${k.emoji} ${k.name}`;
+    ok.appendChild(o);
+  }
+  ok.value = "study";
+
+  $("ownForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const kid = oneKid(); if (!kid) return;
+    const title = $("ownTitle").value.trim();
+    if (!title) return;
+    const lim = $("ownLimit").value === "" ? null : Math.max(1, Math.min(600, Number($("ownLimit").value)));
+    ownAdd(kid, title, lim, $("ownKind").value);
+    $("ownTitle").value = ""; $("ownLimit").value = "";
+    $("ownTitle").focus();
+    toast("추가했어요. 시작을 눌러 보세요.");
+  });
+
+  document.querySelectorAll("#starRow button").forEach(b => {
+    b.addEventListener("click", () => {
+      const kid = oneKid(); if (!kid) return;
+      const R = reflectOf(kid);
+      const v = Number(b.dataset.v);
+      R.rating = (R.rating === v) ? 0 : v;   // 같은 별을 다시 누르면 취소
+      markMeta(kid); renderReflect();
+    });
+  });
+  for (const [id, key] of [["rGood", "good"], ["rNext", "next"]]) {
+    $(id).addEventListener("change", e => {
+      const kid = oneKid(); if (!kid) return;
+      reflectOf(kid)[key] = e.target.value.trim() || null;
+      markMeta(kid);
+    });
+  }
+
+  const det = $("fDetail");
+  for (const f of DETAIL_FIELDS) {
+    const l = document.createElement("label");
+    l.className = "dchip";
+    l.innerHTML = `<input type="checkbox" value="${f.id}">${f.label}`;
+    det.appendChild(l);
+  }
+
   const dows = $("fDows");
   [1, 2, 3, 4, 5, 6, 0].forEach(d => {
     const l = document.createElement("label");
@@ -1234,6 +1732,7 @@ function wire() {
     const limitMin = limitRaw === "" ? null : Math.max(1, Number(limitRaw));
     const track = $("fTrack").checked;
     const onHoliday = $("fHoli").checked ? "keep" : "skip";
+    const detail = [...document.querySelectorAll("#fDetail input:checked")].map(i => i.value);
 
     if (editing) {
       // 수정 — 고른 일정 하나만 바꿉니다. 여러 요일을 한 번에 옮길 수는 없습니다.
@@ -1244,7 +1743,7 @@ function wire() {
 
       const moved = date && editing.bucket === "weekly" ? "once"
                   : days.length && editing.bucket === "once" ? "weekly" : null;
-      const next = { ...cur, start, end, limitMin, title, kind, place, track, onHoliday, geo: formGeo };
+      const next = { ...cur, start, end, limitMin, title, kind, place, track, onHoliday, geo: formGeo, detail };
       if (days.length) { next.day = days[0]; delete next.date; }
       if (date) { next.date = date; delete next.day; delete next.off; }
 
@@ -1262,11 +1761,12 @@ function wire() {
     }
 
     if (!oneKid()) { toast("아이를 한 명 고른 뒤 추가하세요"); return; }
-    if (days.length) for (const d of days) sched.weekly.push({ id: uid(), kid: who, day: d, start, end, limitMin, title, kind, place, track, onHoliday, geo: formGeo, off: [] });
-    if (date) sched.once.push({ id: uid(), kid: who, date, start, end, limitMin, title, kind, place, track, geo: formGeo });
+    if (days.length) for (const d of days) sched.weekly.push({ id: uid(), kid: who, day: d, start, end, limitMin, title, kind, place, track, onHoliday, geo: formGeo, detail, off: [] });
+    if (date) sched.once.push({ id: uid(), kid: who, date, start, end, limitMin, title, kind, place, track, geo: formGeo, detail });
     writeLS(LS.sched, sched);
     ev.target.reset(); $("fStart").value = start; $("fTrack").checked = true; $("fHoli").checked = false;
     formGeo = null; paintFormGeo();
+    document.querySelectorAll("#fDetail input").forEach(i => { i.checked = false; });
     renderEdit(); renderWeek(); renderToday();
 
     // 방금 넣은 일정이 기존 것과 겹치는지 바로 알려 줍니다(막지는 않습니다).
@@ -1288,6 +1788,13 @@ function wire() {
       : "추가했습니다. 아래 저장 버튼으로 저장소에 반영하세요.");
   });
 
+  // 종류를 바꾸면 그 종류의 기본 기록 항목을 자동으로 켭니다(수정 중일 때는 건드리지 않음).
+  $("fKind").addEventListener("change", ev => {
+    if (editing) return;
+    const def = DEFAULT_DETAIL[ev.target.value];
+    if (!def) return;
+    document.querySelectorAll("#fDetail input").forEach(i => { i.checked = def.includes(i.value); });
+  });
   $("fCancel").addEventListener("click", () => cancelEdit());
 
   // ---- 장소 등록 ----
@@ -1418,6 +1925,22 @@ function wire() {
   });
   $("syncNow").addEventListener("click", async () => { await flush(); await loadDay(true); recCache = null; render(); toast("동기화했습니다"); });
   $("recReload").addEventListener("click", () => renderRecords(true));
+  document.querySelectorAll("#repMode button").forEach(b =>
+    b.addEventListener("click", () => { repMode = b.dataset.mode; repOffset = 0; renderRecords(false); }));
+  $("repPrev").addEventListener("click", () => { repOffset--; renderRecords(false); });
+  $("repNext").addEventListener("click", () => { if (repOffset < 0) { repOffset++; renderRecords(false); } });
+  $("repCopy").addEventListener("click", async () => {
+    const t = reportText();
+    if (!t) { toast("먼저 리포트를 불러오세요"); return; }
+    try { await navigator.clipboard.writeText(t); toast("복사했습니다. 붙여넣기 하세요."); }
+    catch (e) { toast("복사가 막혀 있습니다. 파일로 저장을 쓰세요."); }
+  });
+  $("repSave").addEventListener("click", () => {
+    const t = reportText();
+    if (!t) { toast("먼저 리포트를 불러오세요"); return; }
+    const me = kidById(who) || {};
+    download(`${me.name}_${repMode === "week" ? "주간" : "월간"}리포트.txt`, t, "text/plain");
+  });
 
   $("notifyBtn").addEventListener("click", async () => {
     if (notifyOn) { notifyOn = false; writeLS(LS.notify, false); paintNotify(); return; }
@@ -1437,7 +1960,9 @@ function wire() {
     if (document.hidden) { flush(); return; }
     await loadDay(true); render(); tick();
   });
-  window.addEventListener("beforeunload", () => { if (Object.values(dirtyMap).some(x => x.size)) flush(); });
+  window.addEventListener("beforeunload", () => {
+    if (Object.values(dirtyMap).some(x => x.size) || dirtyMeta.size) flush();
+  });
 }
 
 /* ===================== 시작 ===================== */
@@ -1456,7 +1981,8 @@ async function boot() {
   tick();
   setInterval(tick, 5000);
   setInterval(() => {
-    if (!document.hidden && statusRepo.authed && !Object.values(dirtyMap).some(x => x.size)) loadDay(true).then(render);
+    if (!document.hidden && statusRepo.authed
+        && !Object.values(dirtyMap).some(x => x.size) && !dirtyMeta.size) loadDay(true).then(render);
   }, 60000);
   try { navigator.serviceWorker?.register("./sw.js", { scope: "./" }).catch(() => { }); } catch (e) { }
 }

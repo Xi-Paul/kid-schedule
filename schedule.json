@@ -50,17 +50,6 @@
       "kid": "kid1"
     },
     {
-      "id": "hw1",
-      "day": 1,
-      "start": "19:00",
-      "end": "19:40",
-      "limitMin": 40,
-      "title": "숙제",
-      "kind": "study",
-      "place": "",
-      "kid": "kid1"
-    },
-    {
       "id": "school2",
       "day": 2,
       "start": "08:30",
@@ -78,17 +67,6 @@
       "end": "16:20",
       "title": "피아노",
       "kind": "academy",
-      "place": "",
-      "kid": "kid1"
-    },
-    {
-      "id": "hw2",
-      "day": 2,
-      "start": "19:00",
-      "end": "19:40",
-      "limitMin": 40,
-      "title": "숙제",
-      "kind": "study",
       "place": "",
       "kid": "kid1"
     },
@@ -245,6 +223,226 @@
       "title": "잘 준비",
       "kind": "life",
       "place": ""
+    },
+    {
+      "id": "eng1",
+      "kid": "kid1",
+      "day": 1,
+      "start": "19:00",
+      "end": "19:30",
+      "limitMin": 30,
+      "title": "영어 (아이보람)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "book",
+        "listen",
+        "speak"
+      ]
+    },
+    {
+      "id": "math1",
+      "kid": "kid1",
+      "day": 1,
+      "start": "19:30",
+      "end": "20:10",
+      "limitMin": 40,
+      "title": "수학 (연산·교과)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "pages",
+        "graded",
+        "redo"
+      ]
+    },
+    {
+      "id": "eng2",
+      "kid": "kid1",
+      "day": 2,
+      "start": "19:00",
+      "end": "19:30",
+      "limitMin": 30,
+      "title": "영어 (아이보람)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "book",
+        "listen",
+        "speak"
+      ]
+    },
+    {
+      "id": "math2",
+      "kid": "kid1",
+      "day": 2,
+      "start": "19:30",
+      "end": "20:10",
+      "limitMin": 40,
+      "title": "수학 (연산·교과)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "pages",
+        "graded",
+        "redo"
+      ]
+    },
+    {
+      "id": "eng3",
+      "kid": "kid1",
+      "day": 3,
+      "start": "19:00",
+      "end": "19:30",
+      "limitMin": 30,
+      "title": "영어 (아이보람)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "book",
+        "listen",
+        "speak"
+      ]
+    },
+    {
+      "id": "math3",
+      "kid": "kid1",
+      "day": 3,
+      "start": "19:30",
+      "end": "20:10",
+      "limitMin": 40,
+      "title": "수학 (연산·교과)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "pages",
+        "graded",
+        "redo"
+      ]
+    },
+    {
+      "id": "eng4",
+      "kid": "kid1",
+      "day": 4,
+      "start": "19:00",
+      "end": "19:30",
+      "limitMin": 30,
+      "title": "영어 (아이보람)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "book",
+        "listen",
+        "speak"
+      ]
+    },
+    {
+      "id": "math4",
+      "kid": "kid1",
+      "day": 4,
+      "start": "19:30",
+      "end": "20:10",
+      "limitMin": 40,
+      "title": "수학 (연산·교과)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "pages",
+        "graded",
+        "redo"
+      ]
+    },
+    {
+      "id": "eng5",
+      "kid": "kid1",
+      "day": 5,
+      "start": "19:00",
+      "end": "19:30",
+      "limitMin": 30,
+      "title": "영어 (아이보람)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "book",
+        "listen",
+        "speak"
+      ]
+    },
+    {
+      "id": "math5",
+      "kid": "kid1",
+      "day": 5,
+      "start": "19:30",
+      "end": "20:10",
+      "limitMin": 40,
+      "title": "수학 (연산·교과)",
+      "kind": "study",
+      "place": "",
+      "detail": [
+        "pages",
+        "graded",
+        "redo"
+      ]
+    },
+    {
+      "id": "read1",
+      "kid": "kid1",
+      "day": 1,
+      "start": "20:30",
+      "end": "21:00",
+      "limitMin": 30,
+      "title": "독서",
+      "kind": "read",
+      "place": "",
+      "detail": [
+        "book",
+        "pages"
+      ]
+    },
+    {
+      "id": "read1_3",
+      "kid": "kid1",
+      "day": 3,
+      "start": "20:30",
+      "end": "21:00",
+      "limitMin": 30,
+      "title": "독서",
+      "kind": "read",
+      "place": "",
+      "detail": [
+        "book",
+        "pages"
+      ]
+    },
+    {
+      "id": "read1_5",
+      "kid": "kid1",
+      "day": 5,
+      "start": "20:30",
+      "end": "21:00",
+      "limitMin": 30,
+      "title": "독서",
+      "kind": "read",
+      "place": "",
+      "detail": [
+        "book",
+        "pages"
+      ]
+    },
+    {
+      "id": "k2read",
+      "kid": "kid2",
+      "day": 4,
+      "start": "20:00",
+      "end": "20:30",
+      "limitMin": 30,
+      "title": "독서",
+      "kind": "read",
+      "place": "",
+      "detail": [
+        "book",
+        "pages"
+      ]
     }
   ],
   "once": []

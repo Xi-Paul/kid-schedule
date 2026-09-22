@@ -173,3 +173,39 @@ table.rec td.over{color:var(--warn);font-weight:600}
 .dgrp .list li{padding:8px 0;gap:8px}
 .dgrp .list li:first-child{padding-top:4px}
 .dgrp .list .meta b{font-size:14px}
+
+/* ---- 일정 겹침 안내 ---- */
+.clash{margin:8px 0 0;font-size:12.5px;line-height:1.4;color:var(--warn);font-weight:600}
+.dgrp .list .clash{margin:3px 0 0;font-size:12px}
+.dgrp.has-clash{border-color:var(--warn)}
+.clashtag{color:var(--warn);font-weight:700}
+.ev:has(.clash){border-left-style:double;border-left-width:7px}
+
+/* ---- 공휴일 ---- */
+.holibar{display:flex;flex-direction:column;gap:3px;background:var(--card);
+  border:1px solid var(--line);border-left:6px solid var(--now);border-radius:var(--radius);
+  padding:12px 14px;margin-bottom:12px}
+.holibar b{font-family:var(--round);font-weight:400;font-size:17px}
+.holibar span{font-size:13px;color:var(--ink-soft)}
+.day.is-holiday{background:color-mix(in srgb,var(--now) 7%,var(--card))}
+.holiname{margin:0 0 6px;font-size:12px;font-weight:700;color:var(--now)}
+.warnline{color:var(--warn)!important;font-weight:600}
+
+/* ---- 일정 개별 수정 ---- */
+.tapedit{cursor:pointer;border-radius:8px;padding:2px 6px;margin:-2px -6px;transition:background .12s}
+.tapedit:hover{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.tapedit:focus-visible{outline:2px solid var(--now);outline-offset:1px}
+.list li.editing{background:color-mix(in srgb,var(--now) 9%,transparent);border-radius:8px}
+.editbanner{margin:0 0 14px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5;
+  background:color-mix(in srgb,var(--now) 10%,transparent);border:1px solid var(--now);color:var(--ink)}
+
+/* ---- 장소 확인 ---- */
+.geobox{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--paper);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.geobox > span:first-child{flex:1;min-width:180px;font-size:13px;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums}
+.geobox .geoset{color:var(--ok);font-weight:600}
+.badges{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.badge.spot-here{color:var(--ok)}
+.badge.spot-away{color:var(--warn)}
+.badge.spot-unknown{color:var(--mute)}

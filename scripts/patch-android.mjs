@@ -8,6 +8,8 @@
  *  2) 고정 키스토어 서명  — 다음 버전을 기존 앱 위에 덮어 설치할 수 있게
  *  3) versionName / versionCode 를 CI 값으로
  *  4) 상태표시줄 알림 아이콘
+
+ * 위치는 "앱을 쓰는 동안"만 읽습니다. ACCESS_BACKGROUND_LOCATION 은 넣지 않습니다.
  *
  * build.gradle 은 템플릿 내부를 정규식으로 헤집지 않고, 파일 끝에 android{} 블록을
  * 한 번 더 열어 덮어씁니다. Capacitor 버전이 올라가도 깨지지 않는 방식입니다.
@@ -29,7 +31,9 @@ const PERMS = [
   ["android.permission.POST_NOTIFICATIONS",    "Android 13+ 알림 표시"],
   ["android.permission.SCHEDULE_EXACT_ALARM",  "Android 12~13 정확한 예약 알람"],
   ["android.permission.USE_EXACT_ALARM",       "Android 14+ 승인 없이 정확한 알람"],
-  ["android.permission.RECEIVE_BOOT_COMPLETED","재부팅 후 알람 복원"]
+  ["android.permission.RECEIVE_BOOT_COMPLETED","재부팅 후 알람 복원"],
+  ["android.permission.ACCESS_COARSE_LOCATION", "장소 확인(대략) — 앱을 쓰는 동안만"],
+  ["android.permission.ACCESS_FINE_LOCATION",   "장소 확인(정밀) — 앱을 쓰는 동안만"]
 ];
 const missing = PERMS.filter(([p]) => !m.includes(`"${p}"`));
 if (missing.length) {

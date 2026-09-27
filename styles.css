@@ -228,7 +228,7 @@ table.rec td.over{color:var(--warn);font-weight:600}
 .kidbar{display:flex;gap:7px;margin-top:12px;flex-wrap:wrap}
 .kidchip{border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.10);color:#fff;
   border-radius:999px;padding:6px 13px;font-size:13.5px;font-weight:600;white-space:nowrap}
-.kidchip.on{background:#fff;color:var(--ink);border-color:#fff}
+.kidchip.on{background:#fff;color:#16324F;border-color:#fff}   /* 헤더는 늘 어두우므로 고정색 */
 
 /* ---- 세부 기록 ---- */
 .detail{margin-top:11px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;

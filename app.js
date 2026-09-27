@@ -795,6 +795,8 @@ function renderProgress() {
   if (!kid) return;
 
   const p = todayProgress(kid);
+  // 오늘 체크할 수 있는 게 하나도 없으면 빈 링을 띄워 두지 않습니다.
+  $("ringWrap").classList.toggle("hidden", p.total === 0);
   const C = 2 * Math.PI * 26;                       // 반지름 26 원둘레
   $("progArc").setAttribute("stroke-dasharray", `${(C * p.pct) / 100} ${C}`);
   $("progText").textContent = p.total ? `${p.done}/${p.total}` : "—";
@@ -889,9 +891,22 @@ function renderHeader() {
       what.textContent = `🎌 ${hol} — 쉬는 날`;
       when.textContent = "오늘은 일정 없이 쉬어요";
     } else {
+      /* 아무것도 체크하지 않았는데 "다 했다"고 축하하면 안 됩니다.
+         그렇다고 나무라지도 않습니다 — 사실만 담담하게 적습니다. */
       const p = oneKid() ? todayProgress(oneKid()) : null;
-      what.textContent = list.length ? (p && p.allDone ? "오늘 계획 다 했어요! 🎉" : "오늘 일정 끝! 🎉") : "오늘은 일정이 없어요";
-      when.textContent = list.length ? (p && p.allDone ? `${p.done}개 모두 완료 — 푹 쉬자` : "푹 쉬자") : "";
+      if (!list.length) {
+        what.textContent = "오늘은 일정이 없어요";
+        when.textContent = "";
+      } else if (p && p.allDone) {
+        what.textContent = "오늘 계획 다 했어요! 🎉";
+        when.textContent = `${p.done}개 모두 완료 — 푹 쉬자`;
+      } else if (p && p.done > 0) {
+        what.textContent = "오늘 일정 끝! 🎉";
+        when.textContent = `${p.done}개 완료 — 푹 쉬자`;
+      } else {
+        what.textContent = "오늘 일정 시간이 지났어요";
+        when.textContent = p && p.missed ? `못 한 것 ${p.missed}개 — 내일 다시 해보자` : "";
+      }
     }
   }
 }

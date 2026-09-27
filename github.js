@@ -28,6 +28,22 @@
     return new TextDecoder().decode(bytes);
   }
 
+  /**
+   * fetch 가 HTTP 응답도 못 받고 실패하면(TypeError) 원인을 짐작할 수 있게 바꿔 던집니다.
+   * 이 경우는 토큰 문제가 아니라 네트워크나 브라우저 차단입니다.
+   */
+  async function netFetch(url, opt) {
+    try {
+      return await fetch(url, opt);
+    } catch (e) {
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+      throw new GhError(0, offline
+        ? "인터넷에 연결되어 있지 않습니다."
+        : "GitHub 에 요청하지 못했습니다(네트워크 차단). 와이파이·데이터를 확인하고, 회사·학교망이면 다른 망에서 시도해 보세요.",
+        { cause: String(e && e.message || e) });
+    }
+  }
+
   class GhError extends Error {
     constructor(status, message, body) {
       super(message);
@@ -83,7 +99,7 @@
 
     /** 토큰·저장소 접근 확인. 성공하면 권한 정보를 돌려줍니다. */
     async check() {
-      const res = await fetch(`${API}/repos/${this.slug}`, { headers: this._headers() });
+      const res = await netFetch(`${API}/repos/${this.slug}`, { headers: this._headers() });
       this._trackRate(res);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new GhError(res.status, explain(res.status, body), body);
@@ -102,7 +118,10 @@
     async readJson(path) {
       const url = `${API}/repos/${this.slug}/contents/${encodeURI(path)}`
         + `?ref=${encodeURIComponent(this.branch)}&t=${Date.now()}`;
-      const res = await fetch(url, { headers: this._headers({ "Cache-Control": "no-cache" }) });
+      // Cache-Control 헤더는 붙이지 않습니다. GitHub API 의 CORS 허용 목록에 없어서
+      // 브라우저가 사전 검사에서 요청을 막고 "Failed to fetch" 만 남깁니다.
+      // 캐시 회피는 주소 끝의 &t=시각 으로 합니다.
+      const res = await netFetch(url, { headers: this._headers() });
       this._trackRate(res);
       if (res.status === 404) return { data: null, sha: null, missing: true };
       const body = await res.json().catch(() => ({}));
@@ -111,7 +130,7 @@
 
       let text;
       if (body.content) text = b64decode(body.content);
-      else if (body.download_url) text = await (await fetch(body.download_url)).text();
+      else if (body.download_url) text = await (await netFetch(body.download_url)).text();
       else throw new GhError(422, `${path} 내용을 읽지 못했습니다. 파일이 너무 큽니다.`, body);
 
       let data;
@@ -123,7 +142,7 @@
     /** 토큰 없이 읽기 — raw.githubusercontent.com (약 5분 캐시, 공개 저장소만) */
     async readJsonPublic(path) {
       const url = `https://raw.githubusercontent.com/${this.slug}/${this.branch}/${encodeURI(path)}?t=${Date.now()}`;
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await netFetch(url, { cache: "no-store" });
       if (res.status === 404) return { data: null, sha: null, missing: true };
       if (!res.ok) throw new GhError(res.status, `파일을 받지 못했습니다 (${res.status}).`, null);
       return { data: await res.json(), sha: null, missing: false };
@@ -142,7 +161,7 @@
       };
       if (sha) payload.sha = sha;
 
-      const res = await fetch(`${API}/repos/${this.slug}/contents/${encodeURI(path)}`, {
+      const res = await netFetch(`${API}/repos/${this.slug}/contents/${encodeURI(path)}`, {
         method: "PUT",
         headers: this._headers({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload)

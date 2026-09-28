@@ -15,7 +15,7 @@ const OUT = path.join(ROOT, "www");
 
 const FILES = [
   "index.html", "styles.css", "github.js", "app.js", "native.js",
-  "manifest.webmanifest", "config.json", "schedule.json", "holidays.json",
+  "manifest.webmanifest", "config.json", "schedule.json", "holidays.json", "vendor/qrcode.js",
   "icon-192.png", "icon-512.png", "icon-512-maskable.png"
 ];
 // 서비스 워커는 APK에 넣지 않습니다. 웹뷰에서 캐시가 겹치면 갱신이 꼬입니다.
@@ -32,6 +32,7 @@ for (const f of FILES) {
     process.exitCode = 1;
     continue;
   }
+  fs.mkdirSync(path.dirname(path.join(OUT, f)), { recursive: true });
   fs.copyFileSync(src, path.join(OUT, f));
   n++;
 }

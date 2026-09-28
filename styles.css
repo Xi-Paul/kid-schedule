@@ -373,3 +373,14 @@ table.rec td.over{color:var(--warn);font-weight:600}
 .bulklist .rm{color:var(--now);text-decoration:line-through}
 .kindtag{font-size:11.5px;color:var(--ink-soft);border:1px solid var(--line);border-radius:6px;padding:0 5px}
 .was{font-size:12px;color:var(--ink-soft)}
+
+/* ---- 다른 기기 연결 ---- */
+.joinpanel{border-left:5px solid var(--ok)}
+.joinbox{margin-top:16px;padding:16px;border:1px dashed var(--line);border-radius:12px;text-align:center}
+.joinwho{margin:0 0 10px;font-weight:700}
+.joinqr{display:inline-block;background:#fff;padding:10px;border-radius:12px;
+  width:min(320px,80vw)}
+.joinqr svg{display:block;width:100%;height:auto}
+.joinwarn{margin:12px 0 10px;color:var(--warn)!important}
+.joinwarn span{display:block;margin-top:4px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.joinbox .btns{justify-content:center}

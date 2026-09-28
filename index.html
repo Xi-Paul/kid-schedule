@@ -304,6 +304,46 @@
       <p class="hint" style="margin:6px 0 0" id="holiInfo"></p>
     </div>
 
+    <div class="panel joinpanel hidden" id="joinPanel">
+      <h2>📱 다른 기기 연결</h2>
+      <p class="hint">아이 폰이나 다른 기기를 연결할 때 씁니다. QR 을 그 기기 카메라로 찍으면
+        저장소·역할·아이·토큰이 한 번에 들어갑니다. <b>기기마다 한 번만</b> 하면 됩니다.</p>
+      <div class="row two">
+        <div>
+          <label for="joinRole">그 기기의 역할</label>
+          <select id="joinRole">
+            <option value="child">아이 — 체크만</option>
+            <option value="parent">부모 — 편집까지</option>
+            <option value="viewer">보기만 (토큰 없음)</option>
+          </select>
+        </div>
+        <div id="joinKidRow">
+          <label for="joinKid">누구의 기기</label>
+          <select id="joinKid"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="joinToken">넘겨줄 토큰 (선택)</label>
+          <input type="password" id="joinToken" placeholder="비우면 이 기기의 토큰을 그대로 넘깁니다" autocomplete="off">
+          <p class="hint" style="margin:6px 0 0">아이 기기용 토큰을 따로 만들어 두셨다면 여기 붙여넣으세요.
+            폰을 잃어버렸을 때 그 토큰만 폐기하면 됩니다.</p>
+        </div>
+      </div>
+      <button class="btn primary" type="button" id="joinMake">QR 만들기</button>
+
+      <div class="joinbox hidden" id="joinBox">
+        <p class="joinwho" id="joinWho"></p>
+        <div class="joinqr" id="joinQR"></div>
+        <p class="hint joinwarn">⚠ 이 QR 에는 토큰이 들어 있습니다. 사진으로 남기거나 다른 사람에게 보여 주지 마세요.
+          <span id="joinLeft"></span></p>
+        <div class="btns">
+          <button class="btn small" type="button" id="joinCopy">링크 복사</button>
+          <button class="btn small danger" type="button" id="joinHide">지금 지우기</button>
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
       <h2>음성 알림</h2>
       <p class="hint">일정 제목을 그대로 읽어 줍니다. 브라우저 정책상 <b>한 번 눌러 켜야</b> 소리가 나고,
@@ -361,6 +401,7 @@
   </div>
 </div>
 
+<script src="./vendor/qrcode.js"></script>
 <script src="./github.js"></script>
 <script src="./native.js"></script>
 <script src="./app.js"></script>

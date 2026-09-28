@@ -1,6 +1,6 @@
 /* 앱 껍데기만 캐시합니다. 일정과 진행 기록은 GitHub API로 직접 받으므로 캐시하지 않습니다. */
-const CACHE = "kidsched-v4";
-const SHELL = ["./", "./index.html", "./styles.css", "./github.js", "./app.js",
+const CACHE = "kidsched-v5";
+const SHELL = ["./", "./index.html", "./styles.css", "./vendor/qrcode.js", "./github.js", "./app.js",
                "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {

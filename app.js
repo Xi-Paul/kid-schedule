@@ -644,6 +644,111 @@ function renderReflect() {
   if (document.activeElement !== $("rNext")) $("rNext").value = R.next || "";
 }
 
+/* ===================== 다른 기기 연결 (QR) =====================
+ * 설정(저장소·역할·아이·토큰)을 주소의 # 뒤에 담아 QR 로 보여 줍니다.
+ * 아이 폰 카메라로 찍으면 앱이 열리면서 한 번에 설정됩니다.
+ *
+ * # 뒤(fragment)는 브라우저가 서버로 보내지 않습니다. GitHub Pages 접속 기록에도 남지 않습니다.
+ * 읽은 즉시 주소창에서 지워 방문 기록에도 남기지 않습니다.
+ * 다만 QR 을 사진으로 찍어 두면 누구나 토큰을 얻으므로, 2분 뒤 화면에서 자동으로 지웁니다.
+ */
+function b64urlEncode(str) {
+  return GH.b64encode(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDecode(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  return GH.b64decode(s);
+}
+function makeJoinLink(opts) {
+  const p = {
+    v: 1, o: conn.owner, r: conn.repo, b: conn.branch,
+    so: conn.statusOwner || undefined, sr: conn.statusRepo || undefined,
+    sb: conn.statusBranch && conn.statusBranch !== "main" ? conn.statusBranch : undefined,
+    role: opts.role, who: opts.who, t: opts.token || undefined
+  };
+  const base = location.origin + location.pathname;
+  return `${base}#join=${b64urlEncode(JSON.stringify(p))}`;
+}
+function readJoinHash() {
+  const m = (location.hash || "").match(/^#join=([A-Za-z0-9_-]+)$/);
+  if (!m) return null;
+  try {
+    const p = JSON.parse(b64urlDecode(m[1]));
+    if (p.v !== 1 || !p.o || !p.r) return null;
+    return p;
+  } catch (e) { return null; }
+}
+/** 주소에 연결 정보가 있으면 적용합니다. 적용했으면 true */
+function applyJoinFromHash() {
+  const p = readJoinHash();
+  if (!p) return false;
+  // 읽자마자 주소창·방문 기록에서 지웁니다
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { }
+
+  const roleName = { parent: "부모", child: "아이", viewer: "보기만" }[p.role] || "보기만";
+  if (!confirm(`이 기기를 "${roleName}" 기기로 연결할까요?\n저장소: ${p.o}/${p.r}` +
+               (p.t ? "\n토큰도 함께 저장됩니다." : ""))) return false;
+
+  conn = Object.assign({}, conn, {
+    owner: p.o, repo: p.r, branch: p.b || "main",
+    statusOwner: p.so || null, statusRepo: p.sr || null, statusBranch: p.sb || "main",
+    role: ["parent", "child", "viewer"].includes(p.role) ? p.role : "viewer",
+    who: p.who || conn.who
+  });
+  writeLS(LS.conn, conn);
+  if (p.t) writeLS(LS.token, p.t);
+  return true;
+}
+
+let joinTimer = null;
+function showJoinQR() {
+  const role = $("joinRole").value;
+  const kidId = $("joinKid").value;
+  const pasted = $("joinToken").value.trim();
+  const token = pasted || readLS(LS.token, "") || "";
+  if (role !== "viewer" && !token) { toast("넘겨줄 토큰이 없습니다. 이 기기에 먼저 넣거나 칸에 붙여넣으세요."); return; }
+  if (pasted && !/^(github_pat_|ghp_)[A-Za-z0-9_]+$/.test(pasted)) { toast("토큰 모양이 아닙니다. github_pat_ 로 시작해야 합니다."); return; }
+
+  const link = makeJoinLink({ role, who: kidId, token: role === "viewer" ? "" : token });
+  const q = qrcode(0, "M");
+  q.addData(link); q.make();
+  $("joinQR").innerHTML = q.createSvgTag({ cellSize: 5, margin: 4, scalable: true });
+  $("joinQR").dataset.link = link;
+  $("joinBox").classList.remove("hidden");
+
+  const k = kidById(kidId);
+  $("joinWho").textContent =
+    `${{ parent: "부모", child: "아이", viewer: "보기만" }[role]} 기기` + (k ? ` · ${k.emoji} ${k.name}` : "") +
+    (role === "viewer" ? " · 토큰 없음" : pasted ? " · 붙여넣은 토큰" : " · 이 기기 토큰");
+
+  // 2분 뒤 지웁니다. 화면 사진으로 토큰이 새는 것을 줄이려는 것입니다.
+  let left = 120;
+  clearInterval(joinTimer);
+  $("joinLeft").textContent = "2:00 뒤 사라집니다";
+  joinTimer = setInterval(() => {
+    left--;
+    $("joinLeft").textContent = `${Math.floor(left / 60)}:${pad(left % 60)} 뒤 사라집니다`;
+    if (left <= 0) hideJoinQR();
+  }, 1000);
+}
+function hideJoinQR() {
+  clearInterval(joinTimer);
+  const box = $("joinBox");
+  if (!box) return;
+  box.classList.add("hidden");
+  $("joinQR").innerHTML = "";
+  delete $("joinQR").dataset.link;
+}
+function paintJoinSettings() {
+  const sel = $("joinKid");
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = kids().map(k => `<option value="${k.id}">${k.emoji} ${esc(k.name)}</option>`).join("");
+  sel.value = kids().some(k => k.id === cur) ? cur : (kids()[0] || {}).id || "";
+  $("joinPanel").classList.toggle("hidden", !isParent());
+}
+
 /* ===================== 한 번에 고치기 (글로 쓰는 일정표) =====================
  * 한 줄이 규칙 하나입니다.
  *   [요일 또는 날짜] [시작]-[끝] [제목] [옵션...]
@@ -2001,6 +2106,7 @@ function renderSettings() {
   paintNotify();
   paintGeoSettings();
   paintVoiceSettings();
+  paintJoinSettings();
 }
 
 /** 헤더의 아이 선택 버튼 */
@@ -2380,6 +2486,22 @@ function wire() {
     if (formGeo) { formGeo.radius = v; paintFormGeo(); }
   });
 
+  // ---- 다른 기기 연결 ----
+  $("joinMake").addEventListener("click", showJoinQR);
+  $("joinHide").addEventListener("click", hideJoinQR);
+  $("joinCopy").addEventListener("click", async () => {
+    const link = $("joinQR").dataset.link;
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link); toast("링크를 복사했습니다. 보낸 뒤 대화에서 지워 주세요."); }
+    catch (e) { toast("복사가 막혀 있습니다. QR 을 쓰세요."); }
+  });
+  $("joinRole").addEventListener("change", e => {
+    $("joinKidRow").classList.toggle("hidden", e.target.value === "parent");
+    hideJoinQR();
+  });
+  $("joinKid").addEventListener("change", hideJoinQR);
+  document.querySelector('nav.tabs').addEventListener("click", hideJoinQR);   // 탭을 떠나면 지웁니다
+
   // ---- 한 번에 고치기 ----
   $("bulkLoad").addEventListener("click", () => {
     const kid = oneKid(); if (!kid) return;
@@ -2590,6 +2712,7 @@ async function boot() {
   wire();
   loadVoices();
   await loadConfig();
+  if (applyJoinFromHash()) { buildRepos(); setTimeout(() => toast("이 기기를 연결했습니다"), 600); }
   await loadHolidays();
   await loadSchedule();
   who = (conn.who && kidById(conn.who)) ? conn.who

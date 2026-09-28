@@ -354,3 +354,22 @@ table.rec td.over{color:var(--warn);font-weight:600}
 .achv.big{background:color-mix(in srgb,#F5B301 18%,transparent);color:var(--ink);
   font-size:14px;padding:8px 14px}
 .pmiss{font-size:12px;opacity:.6;white-space:nowrap}
+
+/* ---- 한 번에 고치기 ---- */
+.panel.bulk{border-left:5px solid var(--ink)}
+.bulk textarea{width:100%;min-height:220px;padding:12px;border:1px solid var(--line);border-radius:10px;
+  background:var(--paper);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:14px;line-height:1.6;resize:vertical;white-space:pre;overflow-x:auto}
+.bulkhelp{margin:0 0 12px}
+.bulkhelp summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--ink-soft)}
+.bulkhelp pre{margin:8px 0 0;padding:10px 12px;background:var(--paper);border-radius:8px;
+  font-size:12.5px;line-height:1.6;overflow-x:auto}
+#bulkOut{margin-top:12px}
+#bulkOut details{margin-top:8px}
+#bulkOut summary{cursor:pointer;font-weight:700;font-size:14px}
+.bulksum{font-size:14.5px;margin:0}
+.bulkerr{color:var(--warn);font-weight:700;margin:0}
+.bulklist{margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.7}
+.bulklist .rm{color:var(--now);text-decoration:line-through}
+.kindtag{font-size:11.5px;color:var(--ink-soft);border:1px solid var(--line);border-radius:6px;padding:0 5px}
+.was{font-size:12px;color:var(--ink-soft)}

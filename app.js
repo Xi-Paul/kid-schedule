@@ -644,6 +644,260 @@ function renderReflect() {
   if (document.activeElement !== $("rNext")) $("rNext").value = R.next || "";
 }
 
+/* ===================== 한 번에 고치기 (글로 쓰는 일정표) =====================
+ * 한 줄이 규칙 하나입니다.
+ *   [요일 또는 날짜] [시작]-[끝] [제목] [옵션...]
+ *   평일 19:00-19:30 영어 (아이보람) #기록:책,듣기,낭독
+ *   월수 16:00-17:00 태권도 @상가 2층 제한60
+ *   10/15 14:00-15:00 치과
+ * 요일: 월화수목금토일 조합, 월~금 범위, 평일, 주말, 매일
+ * 옵션: @장소  제한N  #기록:항목,…  #종류:학원  #체크없음  #공휴일도
+ * 종류는 제목에서 짐작합니다(태권도→운동, 학원→학원 …). 짐작이 틀리면 #종류: 로 지정.
+ *
+ * 적용할 때 기존 일정과 (요일/날짜 + 제목)이 같으면 그 id 를 그대로 씁니다.
+ * id 가 바뀌면 지난 체크 기록과 연결이 끊기기 때문입니다. 장소 좌표(geo)도 이어받습니다.
+ */
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];                 // 월요일부터
+const DAY_CH = { "월": 1, "화": 2, "수": 3, "목": 4, "금": 5, "토": 6, "일": 0 };
+const KIND_SHORT = { "학교": "school", "학원": "academy", "공부": "study", "숙제": "study",
+  "운동": "sport", "생활": "life", "놀이": "play", "독서": "read" };
+const KIND_NAME = { school: "학교", academy: "학원", study: "공부", sport: "운동", life: "생활", play: "놀이", read: "독서" };
+const DETAIL_SHORT = { "페이지": "pages", "쪽": "pages", "채점": "graded", "오답": "redo",
+  "책": "book", "읽은책": "book", "듣기": "listen", "낭독": "speak", "단어": "words", "메모": "memo" };
+const DETAIL_NAME = { pages: "페이지", graded: "채점", redo: "오답", book: "책", listen: "듣기", speak: "낭독", words: "단어", memo: "메모" };
+
+/** 제목으로 종류를 짐작합니다. 앞에 있는 것이 우선입니다("수학 학원" → 학원). */
+const KIND_HINTS = [
+  ["school",  ["학교", "등교"]],
+  ["academy", ["학원", "피아노", "미술", "바이올린", "과외", "공부방", "코딩", "첼로", "플루트"]],
+  ["read",    ["독서", "책 읽", "책읽"]],
+  ["sport",   ["태권도", "수영", "축구", "농구", "줄넘기", "운동", "발레", "체조", "합기도", "야구", "배드민턴", "스케이트"]],
+  ["study",   ["숙제", "영어", "수학", "국어", "과학", "사회", "한자", "공부", "문제집", "학습지", "연산", "받아쓰기"]],
+  ["life",    ["기상", "일어나", "잘 준비", "취침", "정리", "양치", "씻", "준비", "식사", "밥"]],
+  ["play",    ["놀이", "게임", "놀기", "쉬는", "tv", "유튜브"]]
+];
+function guessKind(title) {
+  const t = String(title).toLowerCase();
+  for (const [k, words] of KIND_HINTS) if (words.some(w => t.includes(w))) return k;
+  return "study";
+}
+
+/** "16:00" "9:30" "16시" "4시30분" → "HH:MM" */
+function normTime(s) {
+  let m = String(s).match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) m = String(s).match(/^(\d{1,2})시(?:(\d{1,2})분?)?$/);
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2] || 0);
+  if (h > 23 || mi > 59) return null;
+  return `${pad(h)}:${pad(mi)}`;
+}
+
+/** 요일 표현 → 요일 번호 배열. 못 읽으면 null */
+function parseDays(tok) {
+  if (tok === "매일") return [0, 1, 2, 3, 4, 5, 6];
+  if (tok === "평일") return [1, 2, 3, 4, 5];
+  if (tok === "주말") return [6, 0];
+  const r = tok.match(/^([월화수목금토일])[~\-]([월화수목금토일])$/);
+  if (r) {
+    const a = DAY_ORDER.indexOf(DAY_CH[r[1]]), b = DAY_ORDER.indexOf(DAY_CH[r[2]]);
+    if (a > b) return null;
+    return DAY_ORDER.slice(a, b + 1);
+  }
+  if (/^[월화수목금토일]+$/.test(tok)) {
+    const set = [...new Set([...tok].map(c => DAY_CH[c]))];
+    return DAY_ORDER.filter(d => set.includes(d));
+  }
+  return null;
+}
+
+/** 날짜 표현 → "YYYY-MM-DD". "2026-10-15", "10/15", "10.15" */
+function parseDate(tok) {
+  let m = tok.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  m = tok.match(/^(\d{1,2})[\/.](\d{1,2})$/);
+  if (m) {
+    const y = nowDate().getFullYear(), mo = +m[1], d = +m[2];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return `${y}-${pad(mo)}-${pad(d)}`;
+  }
+  return null;
+}
+
+/** 글 전체 → 규칙 목록과 줄별 오류 */
+function parseScheduleText(text) {
+  const rules = [], errors = [];
+  String(text).split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    const no = i + 1;
+    if (!line || line.startsWith("//")) return;
+
+    const parts = line.split(/\s+/);
+    const when = parts.shift();
+    const days = parseDays(when);
+    const date = days ? null : parseDate(when);
+    if (!days && !date) { errors.push({ no, msg: `"${when}" 을(를) 요일이나 날짜로 읽지 못했습니다` }); return; }
+
+    const tm = (parts.shift() || "").split(/[~\-]/);
+    const start = normTime(tm[0]);
+    const end = tm[1] ? normTime(tm[1]) : "";
+    if (!start) { errors.push({ no, msg: `시작 시간이 없습니다 (예: 16:00-17:00)` }); return; }
+    if (tm[1] && !end) { errors.push({ no, msg: `끝 시간 "${tm[1]}" 을(를) 읽지 못했습니다` }); return; }
+    if (end && mins(end) <= mins(start)) { errors.push({ no, msg: `끝 시간이 시작보다 빠릅니다` }); return; }
+
+    // 나머지: 제목과 옵션을 가릅니다. @장소는 뒤따르는 말까지 옵션이 나올 때까지 이어 붙입니다.
+    const title = [], place = [];
+    let kind = null, limitMin = null, track = true, onHoliday = "skip", detail = [], mode = "title";
+    for (const w of parts) {
+      if (w.startsWith("@")) { mode = "place"; if (w.length > 1) place.push(w.slice(1)); continue; }
+      let m;
+      if ((m = w.match(/^제한(\d{1,3})분?$/))) { limitMin = +m[1]; mode = "opt"; continue; }
+      if ((m = w.match(/^#종류:(.+)$/))) {
+        const k = KIND_SHORT[m[1]];
+        if (!k) { errors.push({ no, msg: `종류 "${m[1]}" 은(는) 없습니다 (학교·학원·공부·운동·생활·놀이·독서)` }); return; }
+        kind = k; mode = "opt"; continue;
+      }
+      if ((m = w.match(/^#기록:(.+)$/))) {
+        for (const x of m[1].split(",").map(s => s.trim()).filter(Boolean)) {
+          const d = DETAIL_SHORT[x];
+          if (!d) { errors.push({ no, msg: `기록 항목 "${x}" 은(는) 없습니다 (페이지·채점·오답·책·듣기·낭독·단어·메모)` }); return; }
+          if (!detail.includes(d)) detail.push(d);
+        }
+        mode = "opt"; continue;
+      }
+      if (w === "#체크없음") { track = false; mode = "opt"; continue; }
+      if (w === "#공휴일도") { onHoliday = "keep"; mode = "opt"; continue; }
+      if (w.startsWith("#")) { errors.push({ no, msg: `"${w}" 은(는) 모르는 옵션입니다` }); return; }
+      (mode === "place" ? place : title).push(w);
+    }
+    const t = title.join(" ").trim();
+    if (!t) { errors.push({ no, msg: `제목이 없습니다` }); return; }
+    rules.push({
+      no, days, date, start, end, title: t, place: place.join(" "),
+      kind: kind || guessKind(t), limitMin, track, onHoliday, detail
+    });
+  });
+  return { rules, errors };
+}
+
+/** 요일 배열 → 가장 짧은 표현 */
+function daysToText(days) {
+  const s = DAY_ORDER.filter(d => days.includes(d));
+  const key = s.join(",");
+  if (key === "1,2,3,4,5,6,0") return "매일";
+  if (key === "1,2,3,4,5") return "평일";
+  if (key === "6,0") return "주말";
+  const idx = s.map(d => DAY_ORDER.indexOf(d));
+  const run = idx.length >= 3 && idx.every((v, i) => i === 0 || v === idx[i - 1] + 1);
+  if (run) return `${DOW[s[0]]}~${DOW[s[s.length - 1]]}`;
+  return s.map(d => DOW[d]).join("");
+}
+
+/** 지금 일정을 글로. 같은 내용이 여러 요일에 있으면 한 줄로 묶습니다. */
+function schedToText(kidId) {
+  const opt = e => {
+    const o = [];
+    if (e.place) o.push("@" + e.place);
+    if (e.limitMin != null) o.push(`제한${e.limitMin}`);
+    if (e.kind !== guessKind(e.title)) o.push(`#종류:${KIND_NAME[e.kind] || "공부"}`);
+    if ((e.detail || []).length) o.push("#기록:" + e.detail.map(d => DETAIL_NAME[d]).join(","));
+    if (e.track === false) o.push("#체크없음");
+    if (e.onHoliday === "keep") o.push("#공휴일도");
+    return o.join(" ");
+  };
+  const groups = new Map();
+  for (const e of sched.weekly.filter(x => x.kid === kidId)) {
+    const k = [e.start, e.end, e.title, opt(e)].join("|");
+    if (!groups.has(k)) groups.set(k, { e, days: [] });
+    groups.get(k).days.push(e.day);
+  }
+  const lines = [...groups.values()]
+    .sort((a, b) => mins(a.e.start) - mins(b.e.start) ||
+                    DAY_ORDER.indexOf(Math.min(...a.days.map(d => DAY_ORDER.indexOf(d)))) -
+                    DAY_ORDER.indexOf(Math.min(...b.days.map(d => DAY_ORDER.indexOf(d)))))
+    .map(g => [daysToText(g.days), `${g.e.start}${g.e.end ? "-" + g.e.end : ""}`, g.e.title, opt(g.e)]
+      .filter(Boolean).join(" "));
+  const once = sched.once.filter(x => x.kid === kidId && x.date >= ymd(nowDate()))
+    .sort((a, b) => a.date.localeCompare(b.date) || mins(a.start) - mins(b.start))
+    .map(e => [e.date, `${e.start}${e.end ? "-" + e.end : ""}`, e.title, opt(e)].filter(Boolean).join(" "));
+  return lines.concat(once.length ? ["", "// 하루만 있는 일정", ...once] : []).join("\n");
+}
+
+const FIELDS = ["start", "end", "title", "place", "kind", "limitMin", "track", "onHoliday", "detail"];
+const same = (a, b) => FIELDS.every(f => JSON.stringify(a[f] ?? null) === JSON.stringify(b[f] ?? null));
+
+/**
+ * 규칙을 실제 일정으로 펼치고, 지금 일정과 비교합니다.
+ * 이 아이의 반복 일정과 "오늘 이후" 하루짜리 일정만 바꿉니다. 지난 날짜 일정은 그대로 둡니다.
+ */
+function planBulk(kidId, rules) {
+  const oldW = sched.weekly.filter(e => e.kid === kidId);
+  const today = ymd(nowDate());
+  const oldO = sched.once.filter(e => e.kid === kidId && e.date >= today);
+  const used = new Set();
+  const nextW = [], nextO = [];
+  const diff = { add: [], change: [], same: 0, remove: [] };
+
+  const adopt = (pool, match, fresh) => {
+    const hit = pool.find(x => !used.has(x.id) && match(x) && x.start === fresh.start)
+             || pool.find(x => !used.has(x.id) && match(x));
+    if (hit) {
+      used.add(hit.id);
+      const merged = { ...fresh, id: hit.id, geo: hit.geo || null, off: hit.off || [] };
+      if (same(hit, merged)) diff.same++; else diff.change.push({ from: hit, to: merged });
+      return merged;
+    }
+    const n = { ...fresh, id: uid(), geo: null, off: [] };
+    diff.add.push(n);
+    return n;
+  };
+
+  for (const r of rules) {
+    const base = { kid: kidId, start: r.start, end: r.end, title: r.title, place: r.place, kind: r.kind,
+                   limitMin: r.limitMin, track: r.track, onHoliday: r.onHoliday, detail: r.detail };
+    if (r.days) for (const d of r.days)
+      nextW.push(adopt(oldW, x => x.day === d && x.title === r.title, { ...base, day: d }));
+    else
+      nextO.push(adopt(oldO, x => x.date === r.date && x.title === r.title, { ...base, date: r.date }));
+  }
+  for (const x of oldW.concat(oldO)) if (!used.has(x.id)) diff.remove.push(x);
+  return { nextW, nextO, diff };
+}
+
+function applyBulk(kidId, plan) {
+  const today = ymd(nowDate());
+  sched.weekly = sched.weekly.filter(e => e.kid !== kidId).concat(plan.nextW);
+  sched.once = sched.once.filter(e => e.kid !== kidId || e.date < today).concat(plan.nextO);
+  writeLS(LS.sched, sched);
+}
+
+let bulkPlan = null;
+function bulkPreview() {
+  const kid = oneKid(); if (!kid) return;
+  const { rules, errors } = parseScheduleText($("bulkText").value);
+  const out = $("bulkOut");
+  bulkPlan = null;
+  $("bulkApply").disabled = true;
+
+  if (errors.length) {
+    out.innerHTML = `<p class="bulkerr">고칠 줄이 ${errors.length}개 있습니다.</p><ul class="bulklist">` +
+      errors.map(e => `<li><b>${e.no}번째 줄</b> ${esc(e.msg)}</li>`).join("") + `</ul>`;
+    return;
+  }
+  const plan = planBulk(kid, rules);
+  const D = plan.diff;
+  const label = e => `${e.day != null ? DOW[e.day] : e.date.slice(5)} ${e.start} ${esc(e.title)}`;
+  let h = `<p class="bulksum">추가 <b>${D.add.length}</b> · 변경 <b>${D.change.length}</b> · 삭제 <b>${D.remove.length}</b> · 그대로 ${D.same}</p>`;
+  const sec = (title, arr, fmt) => arr.length
+    ? `<details open><summary>${title} ${arr.length}</summary><ul class="bulklist">${arr.slice(0, 40).map(fmt).join("")}</ul></details>` : "";
+  h += sec("➕ 추가", D.add, e => `<li>${label(e)} <span class="kindtag">${KIND_NAME[e.kind]}</span></li>`);
+  h += sec("✏️ 변경", D.change, c => `<li>${label(c.to)}${c.from.start !== c.to.start ? ` <span class="was">(${c.from.start}→${c.to.start})</span>` : ""}</li>`);
+  h += sec("🗑 삭제", D.remove, e => `<li class="rm">${label(e)}</li>`);
+  if (!D.add.length && !D.change.length && !D.remove.length) h += `<p class="hint">바뀌는 것이 없습니다.</p>`;
+  out.innerHTML = h;
+  bulkPlan = plan;
+  $("bulkApply").disabled = !(D.add.length || D.change.length || D.remove.length);
+}
+
 /* ===================== 음성 알림 =====================
  * 일정 제목을 그대로 읽어 줍니다. 소리는 화면 알림보다 훨씬 빨리 질리므로
  * 네 가지 제동을 걸어 둡니다.
@@ -1513,6 +1767,11 @@ function renderEdit() {
   }
   const me = kidById(who);
   $("kidLabel").textContent = `${me.emoji} ${me.name}`;
+  const bt = $("bulkText");
+  if (bt && (bt.dataset.kid !== who || !bt.value.trim())) {
+    bt.value = schedToText(who); bt.dataset.kid = who;
+    $("bulkOut").innerHTML = ""; $("bulkApply").disabled = true; bulkPlan = null;
+  }
 
   const wl = $("weeklyList"), ol = $("onceList");
   const todayK = ymd(nowDate());
@@ -2119,6 +2378,31 @@ function wire() {
     const v = Math.max(50, Math.min(2000, Number(e.target.value) || 300));
     e.target.value = v;
     if (formGeo) { formGeo.radius = v; paintFormGeo(); }
+  });
+
+  // ---- 한 번에 고치기 ----
+  $("bulkLoad").addEventListener("click", () => {
+    const kid = oneKid(); if (!kid) return;
+    $("bulkText").value = schedToText(kid);
+    $("bulkText").dataset.kid = kid;
+    $("bulkOut").innerHTML = ""; $("bulkApply").disabled = true; bulkPlan = null;
+    toast("지금 일정을 불러왔습니다");
+  });
+  $("bulkPreview").addEventListener("click", bulkPreview);
+  $("bulkText").addEventListener("input", () => { $("bulkApply").disabled = true; bulkPlan = null; });
+  $("bulkApply").addEventListener("click", () => {
+    const kid = oneKid();
+    if (!kid || !bulkPlan) return;
+    const D = bulkPlan.diff;
+    if (D.remove.length && !confirm(`${D.remove.length}개 일정이 지워집니다. 계속할까요?`)) return;
+    applyBulk(kid, bulkPlan);
+    bulkPlan = null;
+    $("bulkApply").disabled = true;
+    $("bulkText").value = schedToText(kid);          // 정리된 모양으로 다시 보여 줍니다
+    $("bulkOut").innerHTML = `<p class="bulksum">적용했습니다 — 추가 ${D.add.length} · 변경 ${D.change.length} · 삭제 ${D.remove.length}</p>`;
+    render(); syncNativeAlarms(true);
+    if (schedRepo.authed) $("saveSched").click();    // 토큰이 있으면 바로 저장소에 커밋
+    else toast("적용했습니다. 토큰을 넣으면 저장소에도 저장됩니다.");
   });
 
   // ---- 설정: 음성 ----

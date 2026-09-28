@@ -139,6 +139,36 @@
         </div>
       </div>
 
+      <div class="panel bulk">
+        <h2>📋 한 번에 고치기</h2>
+        <p class="hint">한 줄이 일정 하나입니다. 지금 일정을 불러와 고친 뒤 <b>미리보기</b>로 바뀌는 것을 확인하고 적용하세요.
+          기존 일정은 이름이 같으면 이어져서 지난 체크 기록이 끊기지 않습니다.</p>
+        <details class="bulkhelp">
+          <summary>쓰는 법</summary>
+<pre>평일 19:00-19:30 영어 (아이보람) #기록:책,듣기,낭독
+평일 19:30-20:10 수학 (연산·교과) #기록:페이지,채점,오답
+월수 16:00-17:00 태권도 @상가 2층
+월수금 20:30-21:00 독서
+월~금 08:30-13:10 학교 #체크없음
+매일 21:00 잘 준비 제한30 #공휴일도
+10/15 14:00-15:00 치과
+// 두 줄 빗금으로 시작하면 메모(무시됨)</pre>
+          <p class="hint" style="margin:8px 0 0">
+            <b>요일</b> 월화수목금토일 조합 · 월~금(월→일 방향) · 평일 · 주말 · 매일 · 또는 날짜(10/15)<br>
+            <b>시간</b> 16:00-17:00 · 끝 생략 가능 · 16시도 됨<br>
+            <b>옵션</b> @장소 · 제한40 · #기록:페이지,채점,오답,책,듣기,낭독,단어,메모 · #종류:학원 · #체크없음 · #공휴일도<br>
+            <b>종류</b>는 제목으로 짐작합니다(태권도→운동, 피아노→학원, 독서→독서). 틀리면 #종류: 로 바꾸세요.<br><b>제목을 바꾸면</b> 새 일정이 되어 지난 기록과 따로 쌓입니다. 시간·제한만 바꾸면 이어집니다.
+          </p>
+        </details>
+        <textarea id="bulkText" rows="12" spellcheck="false" placeholder="현재 일정 불러오기를 누르세요"></textarea>
+        <div class="btns" style="margin-top:10px">
+          <button class="btn" type="button" id="bulkLoad">현재 일정 불러오기</button>
+          <button class="btn" type="button" id="bulkPreview">미리보기</button>
+          <button class="btn primary" type="button" id="bulkApply" disabled>적용하고 저장</button>
+        </div>
+        <div id="bulkOut"></div>
+      </div>
+
       <div class="panel" id="addPanel">
         <h2 id="formTitle">일정 추가</h2>
         <p class="hint" id="formHint">제한시간을 비우면 종료−시작 시간을 제한시간으로 씁니다. 끝 시간도 없으면 60분입니다.

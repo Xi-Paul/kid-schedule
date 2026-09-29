@@ -17,9 +17,20 @@
       "limitMin": 40,
       "by": "parent",
       "detail": {}
+    },
+    "eng2": {
+      "state": "done",
+      "startedAt": null,
+      "doneAt": "2026-09-29T08:10:29.089Z",
+      "elapsedMin": null,
+      "limitMin": 30,
+      "by": "parent",
+      "detail": {
+        "listen": true
+      }
     }
   },
   "kid": "kid1",
   "name": "첫째",
-  "updatedAt": "2026-09-29T08:10:13.929Z"
+  "updatedAt": "2026-09-29T08:10:32.109Z"
 }

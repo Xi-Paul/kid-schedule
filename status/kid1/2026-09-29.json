@@ -49,5 +49,19 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-29T14:12:28.879Z"
+  "updatedAt": "2026-09-29T14:12:58.994Z",
+  "own": {
+    "own_oh5nxj4": {
+      "id": "own_oh5nxj4",
+      "title": "책읽기",
+      "kind": "read",
+      "limitMin": 30,
+      "state": "todo",
+      "startedAt": null,
+      "doneAt": null,
+      "elapsedMin": null,
+      "madeAt": "2026-09-29T14:12:55.813Z"
+    }
+  },
+  "reflect": {}
 }

@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-29",
+  "items": {
+    "wo800p8": {
+      "state": "done",
+      "startedAt": null,
+      "doneAt": "2026-09-29T04:53:35.751Z",
+      "elapsedMin": null,
+      "limitMin": 50,
+      "by": "parent"
+    }
+  },
+  "kid": "kid1",
+  "name": "첫째",
+  "updatedAt": "2026-09-29T04:53:38.840Z"
+}

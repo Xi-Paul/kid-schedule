@@ -30,15 +30,15 @@
       }
     },
     "86ha0bp": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-09-29T10:37:51.632Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-29T12:39:40.585Z",
+      "elapsedMin": 122,
       "limitMin": 150,
       "by": "parent"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-29T10:37:56.316Z"
+  "updatedAt": "2026-09-29T12:39:43.595Z"
 }

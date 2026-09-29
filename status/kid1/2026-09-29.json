@@ -28,9 +28,17 @@
       "detail": {
         "listen": true
       }
+    },
+    "86ha0bp": {
+      "state": "running",
+      "startedAt": "2026-09-29T10:37:51.632Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 150,
+      "by": "parent"
     }
   },
   "kid": "kid1",
-  "name": "첫째",
-  "updatedAt": "2026-09-29T08:10:32.109Z"
+  "name": "시윤",
+  "updatedAt": "2026-09-29T10:37:54.774Z"
 }

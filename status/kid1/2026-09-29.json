@@ -38,16 +38,16 @@
       "by": "parent"
     },
     "3zjdclk": {
-      "state": "running",
+      "state": "over",
       "startedAt": "2026-09-29T12:53:00.269Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-29T14:12:25.735Z",
+      "elapsedMin": 79,
       "limitMin": 60,
-      "by": "parent",
+      "by": "child",
       "detail": {}
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-29T12:53:03.207Z"
+  "updatedAt": "2026-09-29T14:12:28.879Z"
 }

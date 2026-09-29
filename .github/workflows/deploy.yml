@@ -60,7 +60,7 @@ jobs:
           done
           cp -r app/vendor site/
           # 켜 둔 앱이 새 게시를 알아채도록 버전 표식을 남깁니다
-          printf '{"sha":"%s","time":"%s"}\n' "${GITHUB_SHA::12}" "$(date -u +%FT%TZ)" > site/version.json
+          printf '{"sha":"%s","time":"%s","run":%s}\n' "${GITHUB_SHA::12}" "$(date -u +%FT%TZ)" "${GITHUB_RUN_NUMBER}" > site/version.json
           echo "게시 파일:"; find site -type f | sort
 
       - uses: actions/upload-pages-artifact@v5

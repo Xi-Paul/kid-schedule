@@ -1,13 +1,23 @@
-# APK — kid-schedule.zip 을 풀어서 빌드합니다.
+# APK — kid-schedule.zip 을 풀어서 빌드합니다. 버전은 자동으로 올라갑니다.
 #
-# APK 는 "원격 모드"입니다. 화면·기능 코드는 실행할 때 GitHub Pages 에서 받아 오므로
-# zip 만 올리면 폰에 자동 반영됩니다. APK 를 새로 만들 필요는 알림·위치·아이콘 같은
-# 네이티브 부분이 바뀔 때뿐이라, Release 를 발행할 때만 빌드합니다.
-#   Release 발행   → APK 를 만들어 그 Release 에 첨부 → 폰 앱에 "새 앱 설치하기" 알림
-#   Run workflow   → 시험용 APK (Actions Artifacts)
+# APK 는 원격 모드라 화면·기능 코드는 GitHub Pages 에서 받아 옵니다(zip 만 올리면 폰에 자동 반영).
+# APK 를 새로 만들어야 하는 건 네이티브 부분(앱 설정·아이콘·플러그인·원격 주소)이 바뀔 때뿐입니다.
+#
+#   zip 을 올리면   → 네이티브 지문(scripts/native-fingerprint.mjs)을 최신 Release 와 비교
+#                     같으면 아무것도 안 함 / 다르면 버전을 올려(v1.4 → v1.5) APK 를 만들고 Release 발행
+#                     → 폰 앱에 "새 앱 설치하기" 가 뜹니다
+#   Release 를 손으로 발행 → 그 버전으로 APK 를 만들어 첨부 (예전 방식 그대로)
+#   Run workflow    → 시험용 APK (Actions Artifacts)
+#
+# 지문은 Release 설명 맨 끝의 "native-fingerprint: …" 한 줄에 적어 둡니다.
 name: Build APK
 
 on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'kid-schedule.zip'
+      - 'config.json'
   release:
     types: [ published ]
   workflow_dispatch:
@@ -16,11 +26,96 @@ permissions:
   contents: write
 
 concurrency:
-  group: apk-${{ github.ref }}
-  cancel-in-progress: true
+  group: apk
+  cancel-in-progress: false      # 겹치면 차례로. 버전 번호가 엉키지 않게
 
 jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.d.outputs.build }}
+      version: ${{ steps.d.outputs.version }}
+      fp: ${{ steps.d.outputs.fp }}
+      auto: ${{ steps.d.outputs.auto }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: zip 풀기
+        run: |
+          test -f kid-schedule.zip || { echo "::error::kid-schedule.zip 이 저장소 루트에 없습니다"; exit 1; }
+          rm -rf app && mkdir app && unzip -q kid-schedule.zip -d app
+          if [ ! -f app/index.html ]; then
+            inner=$(find app -maxdepth 3 -name index.html -printf '%h\n' | head -1)
+            [ -n "$inner" ] || { echo "::error::zip 안에 index.html 이 없습니다"; exit 1; }
+            shopt -s dotglob; mv "$inner"/* app/; rmdir "$inner" 2>/dev/null || true
+          fi
+          for f in schedule.json config.json holidays.json; do
+            [ -f "$f" ] && cp "$f" "app/$f" || true
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 빌드할지 정하기
+        id: d
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          FP=$(cd app && node scripts/native-fingerprint.mjs)
+          echo "fp=$FP" >> "$GITHUB_OUTPUT"
+          echo "지금 네이티브 지문: ${FP:0:16}…"
+
+          if [ "$EVENT" = "release" ]; then
+            echo "build=true"  >> "$GITHUB_OUTPUT"
+            echo "auto=false"  >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "손으로 발행한 Release → 빌드"; exit 0
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "build=true"  >> "$GITHUB_OUTPUT"
+            echo "auto=false"  >> "$GITHUB_OUTPUT"
+            echo "version=v0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "시험 빌드"; exit 0
+          fi
+
+          # zip 교체로 들어온 경우 — 최신 Release 의 지문과 비교합니다
+          LATEST=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$LATEST" ]; then
+            echo "build=true"  >> "$GITHUB_OUTPUT"
+            echo "auto=true"   >> "$GITHUB_OUTPUT"
+            echo "version=v1.0" >> "$GITHUB_OUTPUT"
+            echo "Release 가 하나도 없음 → v1.0 빌드"; exit 0
+          fi
+          BODY=$(gh release view "$LATEST" --repo "$GITHUB_REPOSITORY" --json body -q .body)
+          OLD=$(printf '%s\n' "$BODY" | grep -oE 'native-fingerprint: [0-9a-f]{64}' | awk '{print $2}' | tail -1 || true)
+
+          if [ -z "$OLD" ]; then
+            # 지문이 적혀 있지 않은 예전 Release(손으로 만든 v1.4 등).
+            # 그 Release 가 지금 네이티브 상태로 만들어졌다고 보고 지문만 적어 둡니다. 빌드는 하지 않습니다.
+            gh release edit "$LATEST" --repo "$GITHUB_REPOSITORY" \
+              --notes "$(printf '%s\n\nnative-fingerprint: %s\n' "$BODY" "$FP")"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "$LATEST 에 지문을 기록했습니다. 이번엔 APK 를 만들지 않습니다."; exit 0
+          fi
+          if [ "$OLD" = "$FP" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "네이티브 변경 없음 ($LATEST 와 같음) → APK 안 만듦. 화면은 웹으로 자동 반영됩니다."; exit 0
+          fi
+
+          # 네이티브가 바뀜 → 두 번째 자리를 올립니다 (v1.4 → v1.5, v1.9 → v1.10)
+          V=${LATEST#v}; MAJ=${V%%.*}; REST=${V#*.}
+          if [ "$REST" = "$V" ]; then MIN=0; else MIN=${REST%%.*}; fi
+          NEXT="v${MAJ}.$((MIN + 1))"
+          echo "build=true"  >> "$GITHUB_OUTPUT"
+          echo "auto=true"   >> "$GITHUB_OUTPUT"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "네이티브 변경 감지 → $LATEST 에서 $NEXT 로 올립니다"
+
   build:
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -31,15 +126,13 @@ jobs:
       - name: zip 풀기
         working-directory: .
         run: |
-          test -f kid-schedule.zip || { echo "::error::kid-schedule.zip 이 저장소 루트에 없습니다"; exit 1; }
           rm -rf app && mkdir app && unzip -q kid-schedule.zip -d app
           if [ ! -f app/index.html ]; then
             inner=$(find app -maxdepth 3 -name index.html -printf '%h\n' | head -1)
-            [ -n "$inner" ] || { echo "::error::zip 안에 index.html 이 없습니다"; exit 1; }
             shopt -s dotglob; mv "$inner"/* app/; rmdir "$inner" 2>/dev/null || true
           fi
           for f in schedule.json config.json holidays.json; do
-            [ -f "$f" ] && cp "$f" "app/$f" && echo "저장소 $f 사용" || true
+            [ -f "$f" ] && cp "$f" "app/$f" || true
           done
 
       - uses: actions/setup-node@v4
@@ -56,17 +149,6 @@ jobs:
 
       - uses: android-actions/setup-android@v4
 
-      - name: 버전 결정
-        id: ver
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            NAME="${GITHUB_REF#refs/tags/v}"
-          else
-            NAME="0.0.0-${GITHUB_SHA::7}"
-          fi
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "빌드 버전: $NAME (code ${GITHUB_RUN_NUMBER})"
-
       - name: 웹 자산을 www/ 로
         run: npm run build
 
@@ -75,9 +157,11 @@ jobs:
 
       - name: 권한·서명·버전·아이콘 주입
         env:
-          APP_VERSION_NAME: ${{ steps.ver.outputs.name }}
+          APP_VERSION_NAME: ${{ needs.decide.outputs.version }}
           APP_VERSION_CODE: ${{ github.run_number }}
-        run: node scripts/patch-android.mjs
+        run: |
+          export APP_VERSION_NAME="${APP_VERSION_NAME#v}"
+          node scripts/patch-android.mjs
 
       - name: 플러그인 동기화
         run: npx cap sync android
@@ -100,8 +184,29 @@ jobs:
           path: app/out/kid-schedule.apk
           if-no-files-found: error
 
+      # zip 교체로 네이티브가 바뀐 경우: 새 Release 를 만들어 첨부
+      - name: 새 Release 발행 (자동)
+        if: needs.decide.outputs.auto == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.decide.outputs.version }}
+          name: ${{ needs.decide.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: app/out/kid-schedule.apk
+          body: |
+            네이티브 부분(앱 설정·아이콘·플러그인·원격 주소)이 바뀌어 자동으로 만든 APK 입니다.
+            폰 앱에 "새 앱 설치하기" 가 뜹니다.
+
+            native-fingerprint: ${{ needs.decide.outputs.fp }}
+
+      # 손으로 발행한 Release: APK 를 붙이고 지문을 적어 둡니다
       - name: Release 에 첨부
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: app/out/kid-schedule.apk
+          append_body: true
+          body: |
+
+            native-fingerprint: ${{ needs.decide.outputs.fp }}

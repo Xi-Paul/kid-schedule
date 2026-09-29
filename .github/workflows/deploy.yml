@@ -1,0 +1,78 @@
+# 웹 게시 — kid-schedule.zip 을 풀어서 GitHub Pages 에 올립니다.
+# 저장소 루트의 schedule.json / config.json / holidays.json 이 있으면 zip 안의 것보다 우선합니다.
+# (앱이 쓰는 실제 일정이 zip 교체로 덮어써지지 않게)
+#
+# 처음 한 번: Settings → Pages → Build and deployment → Source 를 "GitHub Actions" 로.
+name: Deploy web
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'kid-schedule.zip'
+      - 'schedule.json'
+      - 'config.json'
+      - 'holidays.json'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read          # deploy-pages v5 가 요구합니다
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: zip 풀기
+        run: |
+          test -f kid-schedule.zip || { echo "::error::kid-schedule.zip 이 저장소 루트에 없습니다"; exit 1; }
+          rm -rf app && mkdir app && unzip -q kid-schedule.zip -d app
+          # zip 안에 폴더가 한 겹 더 있으면 끌어올립니다
+          if [ ! -f app/index.html ]; then
+            inner=$(find app -maxdepth 3 -name index.html -printf '%h\n' | head -1)
+            [ -n "$inner" ] || { echo "::error::zip 안에 index.html 이 없습니다"; exit 1; }
+            shopt -s dotglob; mv "$inner"/* app/; rmdir "$inner" 2>/dev/null || true
+          fi
+
+      - name: 저장소의 실제 데이터로 덮기
+        run: |
+          for f in schedule.json config.json holidays.json; do
+            if [ -f "$f" ]; then cp "$f" "app/$f"; echo "저장소 $f 사용"; else echo "zip 의 $f 사용"; fi
+          done
+
+      - name: 게시할 파일만 고르기
+        # 키스토어·빌드 스크립트 등은 웹에 올리지 않습니다
+        run: |
+          mkdir site
+          for f in index.html styles.css github.js app.js native.js sw.js manifest.webmanifest \
+                   config.json schedule.json holidays.json \
+                   icon-192.png icon-512.png icon-512-maskable.png; do
+            cp "app/$f" site/
+          done
+          cp -r app/vendor site/
+          # 켜 둔 앱이 새 게시를 알아채도록 버전 표식을 남깁니다
+          printf '{"sha":"%s","time":"%s"}\n' "${GITHUB_SHA::12}" "$(date -u +%FT%TZ)" > site/version.json
+          echo "게시 파일:"; find site -type f | sort
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

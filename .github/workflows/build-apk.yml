@@ -1,29 +1,50 @@
-# 주행 계측 앱(elevator-ride-meter-android)과 같은 파이프라인.
-#   main 에 push  → Actions Artifacts 에 APK (본인 테스트용, 로그인 필요)
-#   v* 태그 push  → Release 에 APK 첨부 (로그인 없이 받는 공개 링크)
-# 다른 점: 안드로이드 프로젝트를 zip 으로 커밋하지 않고 CI 가 Capacitor 로 매번 생성합니다.
+# APK — kid-schedule.zip 을 풀어서 빌드합니다.
+#
+# APK 는 "원격 모드"입니다. 화면·기능 코드는 실행할 때 GitHub Pages 에서 받아 오므로
+# zip 만 올리면 폰에 자동 반영됩니다. APK 를 새로 만들 필요는 알림·위치·아이콘 같은
+# 네이티브 부분이 바뀔 때뿐이라, Release 를 발행할 때만 빌드합니다.
+#   Release 발행   → APK 를 만들어 그 Release 에 첨부 → 폰 앱에 "새 앱 설치하기" 알림
+#   Run workflow   → 시험용 APK (Actions Artifacts)
 name: Build APK
 
 on:
-  push:
-    branches: [ main ]
-    tags: [ 'v*' ]
+  release:
+    types: [ published ]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
     steps:
       - uses: actions/checkout@v4
 
-      # Capacitor 8 은 Node 22 이상을 요구합니다.
+      - name: zip 풀기
+        working-directory: .
+        run: |
+          test -f kid-schedule.zip || { echo "::error::kid-schedule.zip 이 저장소 루트에 없습니다"; exit 1; }
+          rm -rf app && mkdir app && unzip -q kid-schedule.zip -d app
+          if [ ! -f app/index.html ]; then
+            inner=$(find app -maxdepth 3 -name index.html -printf '%h\n' | head -1)
+            [ -n "$inner" ] || { echo "::error::zip 안에 index.html 이 없습니다"; exit 1; }
+            shopt -s dotglob; mv "$inner"/* app/; rmdir "$inner" 2>/dev/null || true
+          fi
+          for f in schedule.json config.json holidays.json; do
+            [ -f "$f" ] && cp "$f" "app/$f" && echo "저장소 $f 사용" || true
+          done
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
       - name: 의존성 설치
         run: npm ci || npm install
@@ -52,7 +73,7 @@ jobs:
       - name: 안드로이드 프로젝트 생성
         run: npx cap add android
 
-      - name: 권한·서명·버전 주입
+      - name: 권한·서명·버전·아이콘 주입
         env:
           APP_VERSION_NAME: ${{ steps.ver.outputs.name }}
           APP_VERSION_CODE: ${{ github.run_number }}
@@ -60,13 +81,6 @@ jobs:
 
       - name: 플러그인 동기화
         run: npx cap sync android
-
-      - name: 주입 결과 확인
-        run: |
-          echo "--- 권한 ---"
-          grep -o 'android.permission.[A-Z_]*' android/app/src/main/AndroidManifest.xml | sort -u
-          echo "--- 서명/버전 ---"
-          sed -n '/patch-android.mjs/,/patch-android.mjs end/p' android/app/build.gradle
 
       - name: release APK 빌드
         run: |
@@ -83,12 +97,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: kid-schedule-apk
-          path: out/kid-schedule.apk
+          path: app/out/kid-schedule.apk
           if-no-files-found: error
 
-      - name: Release 발행
+      - name: Release 에 첨부
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: out/kid-schedule.apk
-          generate_release_notes: true
+          files: app/out/kid-schedule.apk

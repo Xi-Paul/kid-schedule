@@ -8,18 +8,9 @@
       "elapsedMin": null,
       "limitMin": 50,
       "by": "parent"
-    },
-    "0cuj3v9": {
-      "state": "over",
-      "startedAt": "2026-09-29T06:31:40.275Z",
-      "doneAt": "2026-09-29T07:53:17.028Z",
-      "elapsedMin": 82,
-      "limitMin": 40,
-      "by": "parent",
-      "detail": {}
     }
   },
   "kid": "kid1",
   "name": "첫째",
-  "updatedAt": "2026-09-29T07:53:21.135Z"
+  "updatedAt": "2026-09-29T08:10:07.700Z"
 }

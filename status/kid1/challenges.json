@@ -1,0 +1,19 @@
+{
+  "kid": "kid1",
+  "name": "첫째",
+  "updatedAt": "2026-09-29T05:45:10.790Z",
+  "items": [
+    {
+      "id": "c_t4zh3dm",
+      "goal": "할일을 다해보자",
+      "gift": "인형 뽑기",
+      "size": 20,
+      "theme": "heart",
+      "start": "2026-09-29",
+      "link": "__all__",
+      "stamps": [],
+      "doneAt": null,
+      "createdAt": "2026-09-29T05:45:08.317Z"
+    }
+  ]
+}

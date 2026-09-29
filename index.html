@@ -76,6 +76,63 @@
       <ul class="list" id="ownList"></ul>
     </section>
 
+    <!-- 이달의 보상 (부모가 정하고 부모가 지급) -->
+    <section class="panel rewardbox hidden" id="rewardBox">
+      <div class="chaltitle">
+        <h2 id="rewardTitle">🎁 이달의 보상</h2>
+        <span class="cntbadge" id="rewardCount"></span>
+        <button class="btn small hidden" type="button" id="rewardEdit">보상 정하기</button>
+      </div>
+      <div class="rweditor hidden" id="rewardEditor">
+        <p class="hint">이번 달 챌린지 도장을 합쳐서 셉니다. 단계를 여러 개 둘 수 있어요(예: 10개 아이스크림, 20개 레고).</p>
+        <div id="rewardRows"></div>
+        <div class="btns" style="margin-top:8px">
+          <button class="btn small" type="button" id="rewardAdd">+ 단계 추가</button>
+          <button class="btn small" type="button" id="rewardCopy">지난달과 똑같이</button>
+        </div>
+        <div class="btns" style="margin-top:10px">
+          <button class="btn primary" type="button" id="rewardSave">저장</button>
+          <button class="btn" type="button" id="rewardCancel">취소</button>
+        </div>
+      </div>
+      <div id="rewardList"></div>
+    </section>
+
+    <!-- 목표 챌린지 (도장판) -->
+    <section class="panel chalbox hidden" id="chalBox">
+      <div class="chaltitle">
+        <h2>🏅 목표 달성 챌린지</h2>
+        <button class="btn small" type="button" id="chalNew">+ 새 챌린지</button>
+      </div>
+      <form id="chalForm" class="chalform hidden">
+        <div class="row two">
+          <div><label for="chalGoal">목표</label><input type="text" id="chalGoal" maxlength="30" placeholder="예: 스터디 플래너 쓰기!!" required></div>
+          <div><label for="chalGift">나에게 주는 선물</label><input type="text" id="chalGift" maxlength="30" placeholder="예: 뽑기"></div>
+        </div>
+        <div class="row two">
+          <div><label for="chalSize">도장 칸</label>
+            <select id="chalSize"><option value="10">10개</option><option value="15">15개</option>
+              <option value="20" selected>20개</option><option value="30">30개</option></select></div>
+          <div><label for="chalLink">도장 찍는 방법</label><select id="chalLink"></select></div>
+        </div>
+        <div class="row">
+          <div>
+            <label>도장 모양</label>
+            <div class="thchips" id="chalTheme"></div>
+          </div>
+        </div>
+        <div class="row hidden" id="chalEmojiRow">
+          <div><label for="chalEmoji">쓸 이모지</label>
+            <input type="text" id="chalEmoji" maxlength="4" placeholder="예: 🦄 🍓 ⚽ 🐶" style="font-size:22px"></div>
+        </div>
+        <div class="btns">
+          <button class="btn primary" type="submit">시작하기</button>
+          <button class="btn" type="button" id="chalCancel">취소</button>
+        </div>
+      </form>
+      <div id="chalList"></div>
+    </section>
+
     <!-- 자기주도: 하루 돌아보기 -->
     <section class="panel hidden" id="reflectBox">
       <h2>오늘 돌아보기</h2>
@@ -271,6 +328,17 @@
 
   <!-- ===== 설정 ===== -->
   <section id="tab-set" class="hidden">
+    <div class="panel joinpaste">
+      <h2>🔗 연결 링크로 설정</h2>
+      <p class="hint">부모 기기에서 받은 연결 링크를 붙여넣으면 한 번에 설정됩니다.
+        <b>APK</b>는 카메라로 QR 을 찍어도 앱이 아닌 브라우저가 열리므로 이 방법을 쓰세요.
+        칸을 비우고 누르면 클립보드에서 읽습니다.</p>
+      <div class="ownadd">
+        <input type="text" id="joinPasteText" placeholder="https://…#join=…" autocomplete="off" spellcheck="false">
+        <button class="btn primary" type="button" id="joinPaste">연결</button>
+      </div>
+    </div>
+
     <div class="panel">
       <h2>저장소 연결</h2>
       <p class="hint">토큰은 이 기기의 브라우저에만 저장되고 저장소에는 올라가지 않습니다.

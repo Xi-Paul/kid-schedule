@@ -233,6 +233,10 @@ function normalize(d) {
   o.once = (o.once || []).map(e => Object.assign(fix(e), { date: e.date }))
     .filter(e => e.date && e.start && e.title);
   o.notifyBeforeMin = Number(o.notifyBeforeMin ?? 10);
+  o.rewards = (Array.isArray(d && d.rewards) ? d.rewards : [])
+    .filter(r => r && r.kid && /^\d{4}-\d{2}$/.test(r.month) && r.need > 0 && r.gift)
+    .map(r => ({ id: r.id || "r_" + uid(), kid: okKid(r.kid), month: r.month,
+                 need: Number(r.need), gift: String(r.gift), paidAt: r.paidAt || null }));
   return o;
 }
 /* ===================== 장소 확인 ===================== */
@@ -344,7 +348,8 @@ async function loadConfig() {
   try { base = await (await fetch("./config.json", { cache: "no-store" })).json(); } catch (e) { }
   cfg = {
     check: Object.assign({ beforeMin: 10, afterMin: 30 }, base.check || {}),
-    statusDir: base.statusDir || "status"
+    statusDir: base.statusDir || "status",
+    pagesUrl: base.pagesUrl || null      // 비우면 https://아이디.github.io/저장소/ 로 계산
   };
   const saved = readLS(LS.conn, null);
   conn = Object.assign({
@@ -401,6 +406,7 @@ async function loadDay(force) {
       okCnt++;
     } catch (e) { err = e.message; }
     dayMap[k.id] = mergeDay(k.id, remote, key);
+    await loadChallenges(k.id);
   }
   syncState(err ? "err" : "ok",
     err ? err : (statusRepo.authed ? "저장소와 연결됨" : "읽기 전용"));
@@ -525,6 +531,7 @@ function completeTask(e) {
   const cheer = over ? PRAISE_OVER[Math.floor(Math.random() * PRAISE_OVER.length)]
                      : PRAISE[Math.floor(Math.random() * PRAISE.length)];
   toast(`${e.title} 완료 — ${cheer}${el != null ? ` (${human(el)})` : ""}`);
+  chalAutoFrom(e.kid, e.title);
   maybeCelebrate(e.kid);
 }
 /** 장소 판정을 백그라운드로 돌려 기록에 덧붙입니다. 화면을 막지 않습니다. */
@@ -570,6 +577,7 @@ function ownDone(kidId, id) {
     elapsedMin: el == null ? null : Math.round(el)
   });
   toast(`${o.title} 완료 — ${PRAISE[Math.floor(Math.random() * PRAISE.length)]}${el != null ? ` (${human(el)})` : ""}`);
+  chalAutoFrom(kidId, o.title);
   maybeCelebrate(kidId);
 }
 function ownDel(kidId, id) {
@@ -644,6 +652,561 @@ function renderReflect() {
   if (document.activeElement !== $("rNext")) $("rNext").value = R.next || "";
 }
 
+/** 저장된 선택이 없거나 맞지 않을 때의 기본 화면: 부모는 "모두", 그 외엔 첫째 */
+function defaultWho() {
+  if (conn.who && kidById(conn.who)) return conn.who;
+  if (conn.role === "parent" && kids().length > 1) return "all";
+  return (kids()[0] || {}).id || "";
+}
+
+/* ===================== 🏅 목표 챌린지 (도장판) =====================
+ * 종이 플래너의 "목표 달성 챌린지"를 그대로 옮깁니다.
+ *   목표 · 나에게 주는 선물 · 꺼진 모닥불 N칸 → 해낸 날마다 불을 붙이고 날짜를 남김 → 다 채우면 선물
+ * 연속일 필요가 없습니다. 하루 빠져도 판이 깨지지 않습니다.
+ *
+ * 저장: status/<아이>/challenges.json — 기록 저장소 쪽이라 아이 토큰으로 쓸 수 있습니다.
+ * 하루에 도장 하나. 오늘 찍은 도장만 되돌릴 수 있습니다(실수 방지).
+ * 일정과 연결해 두면 그 일정을 완료하는 순간 자동으로 불이 붙습니다.
+ */
+let chalMap = {};                 // 아이 id → { items: [...] }
+let chalDirty = {};               // 아이 id → Set(바뀐 챌린지 id)
+let chalDeleted = {};             // 아이 id → Set(지운 챌린지 id)
+let chalTimer = null;
+const chalPath = kid => `${cfg.statusDir}/${kid}/challenges.json`;
+const chalOf = kid => (chalMap[kid] || (chalMap[kid] = { items: [] })).items;
+
+async function loadChallenges(kid) {
+  try {
+    const r = statusRepo.authed
+      ? await statusRepo.readJson(chalPath(kid))
+      : await statusRepo.readJsonPublic(chalPath(kid));
+    const remote = (r.data && Array.isArray(r.data.items)) ? r.data.items : [];
+    // 아직 못 보낸 내 변경은 지킵니다
+    const mine = chalDirty[kid] || new Set(), gone = chalDeleted[kid] || new Set();
+    const local = new Map(chalOf(kid).map(c => [c.id, c]));
+    const merged = remote.filter(c => !gone.has(c.id)).map(c => mine.has(c.id) && local.has(c.id) ? local.get(c.id) : c);
+    for (const id of mine) if (local.has(id) && !merged.some(c => c.id === id)) merged.push(local.get(id));
+    chalMap[kid] = { items: merged };
+  } catch (e) { /* 못 읽어도 화면은 그대로 둡니다 */ }
+}
+
+function markChal(kid, id, deleted) {
+  (deleted ? (chalDeleted[kid] || (chalDeleted[kid] = new Set()))
+           : (chalDirty[kid] || (chalDirty[kid] = new Set()))).add(id);
+  syncState("busy", "저장 대기");
+  clearTimeout(chalTimer);
+  chalTimer = setTimeout(flushChallenges, 2000);
+}
+
+async function flushChallenges() {
+  clearTimeout(chalTimer);
+  if (!canWrite()) return;
+  for (const kid of new Set([...Object.keys(chalDirty), ...Object.keys(chalDeleted)])) {
+    const mine = chalDirty[kid] || new Set(), gone = chalDeleted[kid] || new Set();
+    if (!mine.size && !gone.size) continue;
+    const local = new Map(chalOf(kid).map(c => [c.id, c]));
+    try {
+      await statusRepo.updateJson(chalPath(kid), cur => {
+        const items = ((cur && cur.items) || []).filter(c => !gone.has(c.id));
+        for (const id of mine) {
+          if (!local.has(id)) continue;
+          const i = items.findIndex(c => c.id === id);
+          if (i >= 0) items[i] = local.get(id); else items.push(local.get(id));
+        }
+        return { kid, name: (kidById(kid) || {}).name || "", updatedAt: new Date().toISOString(), items };
+      }, `chore(challenge): ${(kidById(kid) || {}).name || kid} 챌린지`);
+      mine.clear(); gone.clear();
+      syncState("ok", "저장됨");
+    } catch (e) { syncState("err", e.message); }
+  }
+}
+
+/** 모닥불 그림. 켜진 것은 불꽃, 꺼진 것은 회색 장작과 번호 */
+function fireSVG(lit, n) {
+  if (lit) return `<svg viewBox="0 0 60 60" class="fire lit" aria-hidden="true">
+    <circle class="glow" cx="30" cy="30" r="28" fill="#FFE3D0"/>
+    <g transform="translate(30 45)">
+      <rect x="-20" y="-4.5" width="40" height="9" rx="4.5" fill="#8E522A" transform="rotate(-24)"/>
+      <rect x="-20" y="-4.5" width="40" height="9" rx="4.5" fill="#B06A35" transform="rotate(24)"/>
+    </g>
+    <g class="flame">
+      <path d="M30 7 C41 20 46 29 40 38 C36 44 24 44 20 38 C14 29 21 19 30 7Z" fill="#FF6B2C"/>
+      <path d="M30 19 C36 27 38 32 34.5 37 C32.5 39.5 27.5 39.5 25.5 37 C22 32 24.5 26 30 19Z" fill="#FFB02E"/>
+      <path d="M30 27 C33 31 33.5 34 31.8 36.4 C30.8 37.6 29.2 37.6 28.2 36.4 C26.5 34 27 31 30 27Z" fill="#FFE27A"/>
+    </g>
+  </svg>`;
+  return `<svg viewBox="0 0 60 60" class="fire" aria-hidden="true">
+    <circle class="ground" cx="30" cy="30" r="28" fill="#E9EDF1"/>
+    <g transform="translate(30 34)">
+      <rect x="-22" y="-5.5" width="44" height="11" rx="5.5" fill="#56606E" transform="rotate(-34)"/>
+      <rect x="-22" y="-5.5" width="44" height="11" rx="5.5" fill="#3F4854" transform="rotate(34)"/>
+    </g>
+    <circle cx="30" cy="34" r="8.5" fill="#3F4854"/>
+    <text x="30" y="38.2" text-anchor="middle" font-size="11.5" font-weight="700" fill="#F3F4F6"
+      font-family="Pretendard Variable, Apple SD Gothic Neo, sans-serif">${n}</text>
+  </svg>`;
+}
+
+/* ---- 도장 모양 ----
+ * 챌린지마다 아이가 고릅니다. 꺼진 칸은 모두 같은 회색 실루엣 + 번호,
+ * 켜진 칸은 모양마다 다른 색. 이모지로 "내 마음대로"도 됩니다.
+ */
+const STAMP_THEMES = [
+  { id: "star",   name: "별" },
+  { id: "heart",  name: "하트" },
+  { id: "flower", name: "꽃" },
+  { id: "apple",  name: "사과" },
+  { id: "clover", name: "클로버" },
+  { id: "fire",   name: "모닥불" },
+  { id: "emoji",  name: "내 마음대로" }
+];
+const OFF_FILL = "#C5CDD6", OFF_NUM = "#56606E";
+
+function starPath(cx, cy, R, r) {
+  let d = "";
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r : R;
+    d += (i ? "L" : "M") + (cx + Math.cos(a) * rad).toFixed(1) + " " + (cy + Math.sin(a) * rad).toFixed(1);
+  }
+  return d + "Z";
+}
+const HEART = "M30 50C12 38 7 26 14 18C20 11 28 13 30 20C32 13 40 11 46 18C53 26 48 38 30 50Z";
+function flowerShape(fillP, fillC) {
+  let g = "";
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+    g += `<circle cx="${(30 + Math.cos(a) * 11).toFixed(1)}" cy="${(31 + Math.sin(a) * 11).toFixed(1)}" r="9.5" fill="${fillP}"/>`;
+  }
+  return g + `<circle cx="30" cy="31" r="7" fill="${fillC}"/>`;
+}
+function cloverShape(fill, stem) {
+  let g = `<path d="M30 33 Q33 44 40 50" stroke="${stem}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+  for (const [dx, dy] of [[0, -9], [9, 0], [0, 9], [-9, 0]]) g += `<circle cx="${30 + dx}" cy="${31 + dy}" r="9" fill="${fill}"/>`;
+  return g + `<circle cx="30" cy="31" r="4" fill="${fill}"/>`;
+}
+const APPLE = "M30 20C22 14 11 18 12 31C13 43 21 51 27 50C29 49.6 31 49.6 33 50C39 51 47 43 48 31C49 18 38 14 30 20Z";
+
+function stampSVG(theme, lit, n, emoji) {
+  const num = `<text class="n" x="30" y="${theme === "heart" ? 36 : 36.5}" text-anchor="middle" font-size="12" font-weight="700" fill="${OFF_NUM}"
+      font-family="Pretendard Variable, Apple SD Gothic Neo, sans-serif">${n}</text>`;
+  const wrap = (cls, inner) => `<svg viewBox="0 0 60 60" class="fire ${cls}" aria-hidden="true">${inner}</svg>`;
+  const ground = `<circle class="ground" cx="30" cy="30" r="28" fill="#E9EDF1"/>`;
+  const glow = c => `<circle class="glow" cx="30" cy="30" r="28" fill="${c}"/>`;
+
+  if (theme === "fire" || !theme) return fireSVG(lit, n);
+  if (theme === "emoji") {
+    if (!lit) return wrap("", ground + num);
+    return wrap("lit", glow("#FFF1D6") + `<text x="30" y="41" text-anchor="middle" font-size="30"
+      font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif">${esc(emoji || "⭐")}</text>`);
+  }
+  if (!lit) {
+    const sil = {
+      star:   `<path class="sil" d="${starPath(30, 31, 23, 10)}" fill="${OFF_FILL}"/>`,
+      heart:  `<path class="sil" d="${HEART}" fill="${OFF_FILL}"/>`,
+      flower: `<g class="sil">${flowerShape(OFF_FILL, OFF_FILL)}</g>`,
+      apple:  `<path class="sil" d="${APPLE}" fill="${OFF_FILL}"/>`,
+      clover: `<g class="sil">${cloverShape(OFF_FILL, OFF_FILL)}</g>`
+    }[theme];
+    return wrap("", ground + sil + num);
+  }
+  const on = {
+    star: glow("#FFF3C4") +
+      `<path d="${starPath(30, 31, 23, 10)}" fill="#FFC83D" stroke="#F0A30A" stroke-width="1.5" stroke-linejoin="round"/>
+       <circle cx="24" cy="27" r="2.2" fill="#fff" opacity=".8"/>
+       <path d="M49 11 l1.5 3.5 3.5 1.5 -3.5 1.5 -1.5 3.5 -1.5 -3.5 -3.5 -1.5 3.5 -1.5Z" fill="#FFB800"/>`,
+    heart: glow("#FFE0EA") +
+      `<path d="${HEART}" fill="#FF5C8A"/>
+       <ellipse cx="21" cy="23" rx="4" ry="2.6" fill="#fff" opacity=".55" transform="rotate(-35 21 23)"/>`,
+    flower: glow("#FFE7F0") + flowerShape("#FF8FB1", "#FFD34E") + `<circle cx="28" cy="29" r="1.8" fill="#fff" opacity=".7"/>`,
+    apple: glow("#FFE1DE") +
+      `<path d="M30 20 Q31 13 35 10" stroke="#7A4A26" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+       <path d="M33 14 C38 8 46 10 45 14 C41 17 36 17 33 14Z" fill="#3FB950"/>
+       <path d="${APPLE}" fill="#EE4235"/>
+       <ellipse cx="21" cy="28" rx="3" ry="5" fill="#fff" opacity=".45" transform="rotate(20 21 28)"/>`,
+    clover: glow("#DDF7E8") + cloverShape("#34C27A", "#2A9D5F") + `<circle cx="27" cy="22" r="1.8" fill="#fff" opacity=".6"/>`
+  }[theme];
+  return wrap("lit", on);
+}
+const THEME_ICON = { star: "⭐", heart: "💗", flower: "🌸", apple: "🍎", clover: "🍀", fire: "🔥" };
+const chalIcon = c => c.theme === "emoji" ? (c.emoji || "⭐") : (THEME_ICON[c.theme || "fire"] || "⭐");
+const DATE_COLOR = { star: "#B7791F", heart: "#D6336C", flower: "#C2255C", apple: "#C92A2A", clover: "#2B8A3E", fire: "#8E522A", emoji: "#8E522A" };
+
+function chalAdd(kid, goal, gift, size, link, theme, emoji) {
+  const c = {
+    id: "c_" + uid(), goal, gift: gift || "", size,
+    theme: theme || "star", emoji: theme === "emoji" ? (emoji || "⭐") : undefined,
+    start: ymd(nowDate()), link: link || null, stamps: [], doneAt: null,
+    createdAt: nowDate().toISOString()
+  };
+  chalOf(kid).push(c);
+  markChal(kid, c.id);
+  return c;
+}
+
+/** 오늘 도장 찍기. 이미 찍었거나 다 찬 판이면 아무것도 안 합니다. */
+function chalStamp(kid, id, auto) {
+  const c = chalOf(kid).find(x => x.id === id);
+  if (!c || c.doneAt) return false;
+  const today = ymd(nowDate());
+  if (c.stamps.includes(today)) { if (!auto) toast(`오늘은 이미 찍었어요 ${chalIcon(c)}`); return false; }
+  const mBefore = stampsInMonth(kid, monthOf(today));
+  c.stamps.push(today);
+  rewardCrossCheck(kid, mBefore, mBefore + 1, monthOf(today));
+  const left = c.size - c.stamps.length;
+  if (left <= 0) {
+    c.doneAt = nowDate().toISOString();
+    markChal(kid, id); render();
+    celebrate(`챌린지 완주! ${chalIcon(c)} ${c.size}개`, c.gift ? `🎁 나에게 주는 선물: ${c.gift}` : `"${c.goal}" 해냈어요`);
+    speak(`${c.goal} 챌린지 완주! ${c.gift ? c.gift + " 선물 받자" : "정말 잘했어"}`);
+    return true;
+  }
+  markChal(kid, id); render();
+  const ic = chalIcon(c);
+  toast(auto ? `${ic} "${c.goal}" 도장 쾅! — ${left}개 남았어`
+             : pick([`${ic} 쾅! ${left}개 남았어`, `${ic} ${c.stamps.length}번째! 조금만 더`, `${ic} 좋아! 앞으로 ${left}개`]));
+  return true;
+}
+function chalUnstamp(kid, id) {
+  const c = chalOf(kid).find(x => x.id === id);
+  if (!c) return;
+  const today = ymd(nowDate());
+  if (!c.stamps.includes(today)) return;
+  c.stamps = c.stamps.filter(d => d !== today);
+  c.doneAt = null;
+  markChal(kid, id); render();
+  toast("오늘 도장을 지웠어요");
+}
+
+/** 일정·스스로 정한 것을 완료했을 때, 연결된 챌린지에 자동으로 불을 붙입니다. */
+function chalAutoFrom(kid, title) {
+  for (const c of chalOf(kid)) if (!c.doneAt && c.link && c.link === title) chalStamp(kid, c.id, true);
+}
+
+function renderChallenges() {
+  const host = $("chalBox");
+  if (!host) return;
+  const kid = oneKid();
+  host.classList.toggle("hidden", !kid);
+  if (!kid) return;
+  const write = canWrite();
+  $("chalNew").classList.toggle("hidden", !write);
+
+  const all = chalOf(kid);
+  const live = all.filter(c => !c.doneAt);
+  const done = all.filter(c => c.doneAt).sort((a, b) => b.doneAt.localeCompare(a.doneAt));
+  const wrap = $("chalList");
+  wrap.innerHTML = "";
+
+  if (!live.length) {
+    wrap.innerHTML = `<p class="chalempty">${done.length ? "새 챌린지를 시작해 볼까요?" : "목표를 하나 정하고, 해낸 날마다 도장을 하나씩 찍어 보세요. 모양은 마음대로 고를 수 있어요."}</p>`;
+  }
+  const today = ymd(nowDate());
+  for (const c of live) {
+    const lit = c.stamps.length, left = c.size - lit;
+    const card = document.createElement("div");
+    card.className = "chal";
+    card.innerHTML = `
+      <div class="chalhead">
+        <div class="chalrow"><span class="chalk">날짜</span><span class="chalv">${c.start.slice(2).replace(/-/g, "/")} ~</span></div>
+        <div class="chalrow"><span class="chalk">목표</span><span class="chalv hand"></span></div>
+        <div class="chalrow"><span class="chalk">나에게 주는 선물</span><span class="chalv hand gift"></span></div>
+      </div>
+      <div class="chalgrid"></div>
+      <div class="chalfoot">
+        <span>${chalIcon(c)} ${lit}/${c.size}${left > 0 ? ` — ${left}개 남았어!` : ""}</span>
+        <span class="chalacts"></span>
+      </div>`;
+    card.querySelector(".chalrow:nth-child(2) .chalv").textContent = c.goal;
+    card.querySelector(".gift").textContent = c.gift || "—";
+
+    const grid = card.querySelector(".chalgrid");
+    const stampedToday = c.stamps.includes(today);
+    for (let i = 0; i < c.size; i++) {
+      const d = c.stamps[i];
+      const cell = document.createElement(write ? "button" : "div");
+      if (write) cell.type = "button";
+      cell.className = "cell" + (d ? " on" : "") + (d === today ? " today" : "");
+      cell.innerHTML = stampSVG(c.theme || "fire", !!d, i + 1, c.emoji) +
+        `<span class="cdate" style="--dc:${DATE_COLOR[c.theme || "fire"]}">${d ? `${+d.slice(5, 7)}/${+d.slice(8)}` : ""}</span>`;
+      if (write) {
+        const next = i === lit && !stampedToday;
+        if (next) cell.classList.add("next");
+        cell.setAttribute("aria-label", d ? `${i + 1}번째 도장 ${d}` : `${i + 1}번째 칸`);
+        cell.addEventListener("click", () => {
+          if (d === today) { if (confirm("오늘 찍은 도장을 지울까요?")) chalUnstamp(kid, c.id); }
+          else if (!d) chalStamp(kid, c.id);
+        });
+      }
+      grid.appendChild(cell);
+    }
+    if (c.link) card.querySelector(".chalfoot span").insertAdjacentHTML("beforeend",
+      ` <span class="challink">· "${esc(c.link)}" 완료하면 자동</span>`);
+    if (write) {
+      const sw = document.createElement("button");
+      sw.type = "button"; sw.className = "btn small"; sw.textContent = "🎨 모양";
+      sw.title = "누를 때마다 다른 모양";
+      sw.addEventListener("click", () => {
+        const ids = STAMP_THEMES.map(t => t.id).filter(x => x !== "emoji" || c.emoji);
+        c.theme = ids[(ids.indexOf(c.theme || "fire") + 1) % ids.length];
+        markChal(kid, c.id); render();
+      });
+      card.querySelector(".chalacts").appendChild(sw);
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "btn small danger"; del.textContent = "그만두기";
+      del.addEventListener("click", () => {
+        if (!confirm(`"${c.goal}" 챌린지를 지울까요? 찍은 도장 ${lit}개도 함께 사라집니다.`)) return;
+        chalMap[kid].items = chalOf(kid).filter(x => x.id !== c.id);
+        markChal(kid, c.id, true); render();
+      });
+      card.querySelector(".chalacts").appendChild(del);
+    }
+    wrap.appendChild(card);
+  }
+  if (done.length) {
+    const d = document.createElement("details");
+    d.className = "chaldone";
+    d.innerHTML = `<summary>🏆 완주한 챌린지 ${done.length}개</summary><ul class="list"></ul>`;
+    for (const c of done) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="meta"><b></b><span></span></span>`;
+      li.querySelector("b").textContent = `${chalIcon(c)} ${c.goal}`;
+      li.querySelector(".meta span").textContent =
+        `${c.size}개 · ${c.start.slice(5).replace("-", "/")} ~ ${c.doneAt.slice(5, 10).replace("-", "/")}` + (c.gift ? ` · 🎁 ${c.gift}` : "");
+      d.querySelector("ul").appendChild(li);
+    }
+    wrap.appendChild(d);
+  }
+}
+
+/** 새 챌린지 폼의 "도장 모양" — 켜진 모습 미리보기로 고릅니다 */
+function paintChalThemes() {
+  const box = $("chalTheme");
+  if (!box) return;
+  const cur = (box.querySelector("input:checked") || {}).value || "star";
+  box.innerHTML = "";
+  for (const t of STAMP_THEMES) {
+    const l = document.createElement("label");
+    l.className = "thchip";
+    l.innerHTML = `<input type="radio" name="chalTheme" value="${t.id}"${t.id === cur ? " checked" : ""}>` +
+      (t.id === "emoji" ? `<span class="thpic thtxt">😊</span>` : `<span class="thpic">${stampSVG(t.id, true, 1)}</span>`) +
+      `<span class="thname">${t.name}</span>`;
+    l.querySelector("input").addEventListener("change", () => {
+      $("chalEmojiRow").classList.toggle("hidden", t.id !== "emoji");
+      if (t.id === "emoji") $("chalEmoji").focus();
+    });
+    box.appendChild(l);
+  }
+  $("chalEmojiRow").classList.toggle("hidden", cur !== "emoji");
+}
+
+/** 새 챌린지 폼의 "일정과 연결" 목록 */
+function paintChalLinks() {
+  const sel = $("chalLink");
+  if (!sel) return;
+  const kid = oneKid();
+  const titles = kid ? [...new Set(sched.weekly.concat(sched.once).filter(e => e.kid === kid && e.track !== false).map(e => e.title))] : [];
+  sel.innerHTML = `<option value="">직접 도장 찍기</option>` +
+    titles.map(t => `<option value="${esc(t)}">"${esc(t)}" 완료하면 자동</option>`).join("");
+}
+
+/* ===================== 🎁 이달의 보상 =====================
+ * 부모가 달마다 "도장 몇 개 → 무엇"을 정하고, 채우면 부모가 지급 처리합니다.
+ * 집계: 그 달에 찍은 챌린지 도장 합계(모든 챌린지). 단계는 여러 개 둘 수 있습니다.
+ *
+ * 저장: schedule.json 의 rewards — 부모 쪽 파일입니다.
+ * 아이 토큰으로는 쓸 수 없으므로 아이가 보상을 바꾸거나 스스로 "지급"할 수 없습니다.
+ * 저장할 때는 건드린 (아이, 달) 묶음만 바꿔 넣어, 다른 기기에서 고친 달은 지키도록 합니다.
+ */
+const monthOf = d => (typeof d === "string" ? d : ymd(d)).slice(0, 7);
+const monthLabel = m => `${+m.slice(5)}월`;
+let rewardTouched = new Set();         // "아이|YYYY-MM"
+let rewardTimer = null;
+let rewardEditing = false;
+
+function rewardsFor(kid, month) {
+  return (sched.rewards || []).filter(r => r.kid === kid && r.month === month).sort((a, b) => a.need - b.need);
+}
+function stampsInMonth(kid, month) {
+  return chalOf(kid).reduce((a, c) => a + c.stamps.filter(d => d.startsWith(month)).length, 0);
+}
+const rewardState = (r, n) => r.paidAt ? "paid" : n >= r.need ? "ready" : "wait";
+
+function touchReward(kid, month) {
+  rewardTouched.add(kid + "|" + month);
+  writeLS(LS.sched, sched);
+  syncState("busy", "보상 저장 대기");
+  clearTimeout(rewardTimer);
+  rewardTimer = setTimeout(flushRewards, 1200);
+}
+async function flushRewards() {
+  clearTimeout(rewardTimer);
+  if (!rewardTouched.size) return;
+  if (!schedRepo.authed) { syncState("err", "토큰이 없어 보상을 저장하지 못했습니다"); return; }
+  const keys = [...rewardTouched];
+  const mine = (sched.rewards || []).filter(r => keys.includes(r.kid + "|" + r.month));
+  try {
+    await schedRepo.updateJson("schedule.json", cur => {
+      const base = cur || JSON.parse(JSON.stringify(sched));
+      const keep = (base.rewards || []).filter(r => !keys.includes(r.kid + "|" + r.month));
+      base.rewards = keep.concat(mine);
+      return base;
+    }, "chore(reward): 이달의 보상");
+    keys.forEach(k => rewardTouched.delete(k));
+    syncState("ok", "보상 저장됨");
+  } catch (e) { syncState("err", e.message); toast(e.message); }
+}
+
+/** 도장을 찍어 이달 합계가 어떤 단계를 넘으면 축하합니다 */
+function rewardCrossCheck(kid, before, after, month) {
+  for (const r of rewardsFor(kid, month)) {
+    if (!r.paidAt && before < r.need && after >= r.need) {
+      setTimeout(() => {
+        celebrate(`🎁 ${monthLabel(month)} 보상 달성!`, `${r.need}개 모아서 → ${r.gift}. 부모님께 보여 주세요`);
+        speak(`${monthLabel(month)} 보상 달성! ${r.gift} 받을 수 있어`);
+      }, 3400);                      // 챌린지 축하와 겹치지 않게 조금 뒤에
+    }
+  }
+}
+
+function payReward(r) {
+  if (!confirm(`"${r.gift}" 을(를) 지급했나요?`)) return;
+  r.paidAt = nowDate().toISOString();
+  touchReward(r.kid, r.month); render();
+  toast(`🎁 ${r.gift} 지급 완료로 기록했습니다`);
+}
+function unpayReward(r) {
+  if (!confirm("지급 기록을 되돌릴까요?")) return;
+  r.paidAt = null;
+  touchReward(r.kid, r.month); render();
+}
+
+function renderRewards() {
+  const host = $("rewardBox");
+  if (!host) return;
+  const kid = oneKid();
+  host.classList.toggle("hidden", !kid);
+  if (!kid) return;
+  const parent = isParent() && schedRepo.authed;
+  const month = monthOf(nowDate());
+  const n = stampsInMonth(kid, month);
+  const tiers = rewardsFor(kid, month);
+
+  $("rewardTitle").textContent = `🎁 ${monthLabel(month)}의 보상`;
+  $("rewardCount").textContent = `이번 달 도장 ${n}개`;
+  $("rewardEdit").classList.toggle("hidden", !parent);
+  $("rewardEditor").classList.toggle("hidden", !(parent && rewardEditing));
+
+  const box = $("rewardList");
+  box.innerHTML = "";
+  if (!tiers.length) {
+    box.innerHTML = `<p class="chalempty">${parent ? "이번 달 보상을 정해 주세요. 챌린지 도장을 모으면 받는 선물이에요." : "이번 달 보상은 아직 정해지지 않았어요. 부모님께 물어보세요!"}</p>`;
+  }
+  for (const r of tiers) {
+    const st = rewardState(r, n);
+    const pct = Math.min(100, Math.round((n / r.need) * 100));
+    const row = document.createElement("div");
+    row.className = "rwrow " + st;
+    row.innerHTML = `
+      <div class="rwtop"><b class="rwneed">${r.need}개</b><span class="rwgift"></span><span class="rwst"></span></div>
+      <div class="rwbar"><i style="width:${pct}%"></i></div>
+      <div class="rwacts"></div>`;
+    row.querySelector(".rwgift").textContent = r.gift;
+    row.querySelector(".rwst").textContent =
+      st === "paid" ? `✓ 받았어요 ${+r.paidAt.slice(5, 7)}/${+r.paidAt.slice(8, 10)}` :
+      st === "ready" ? "🎉 받을 수 있어요!" : `${r.need - n}개 남았어`;
+    const acts = row.querySelector(".rwacts");
+    if (parent && st === "ready") {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn small go"; b.textContent = "지급하기";
+      b.addEventListener("click", () => payReward(r)); acts.appendChild(b);
+    }
+    if (parent && st === "paid") {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn small"; b.textContent = "되돌리기";
+      b.addEventListener("click", () => unpayReward(r)); acts.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+
+  // 지난달에 채웠는데 아직 못 받은 보상 — 달이 바뀌어도 사라지지 않게
+  const owed = (sched.rewards || []).filter(r => r.kid === kid && r.month < month && !r.paidAt &&
+                                                 stampsInMonth(kid, r.month) >= r.need);
+  if (owed.length) {
+    const d = document.createElement("div");
+    d.className = "rwowed";
+    d.innerHTML = `<b>지난달에 모은 보상</b>`;
+    for (const r of owed) {
+      const line = document.createElement("div");
+      line.className = "rwowedline";
+      line.innerHTML = `<span></span>`;
+      line.querySelector("span").textContent = `${monthLabel(r.month)} · ${r.need}개 → ${r.gift}`;
+      if (parent) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn small go"; b.textContent = "지급하기";
+        b.addEventListener("click", () => payReward(r)); line.appendChild(b);
+      } else line.insertAdjacentHTML("beforeend", `<span class="rwst">🎉 받을 수 있어요!</span>`);
+      d.appendChild(line);
+    }
+    box.appendChild(d);
+  }
+}
+
+/** 부모용 보상 편집 칸 */
+function openRewardEditor() {
+  const kid = oneKid(); if (!kid) return;
+  rewardEditing = true;
+  const month = monthOf(nowDate());
+  const rows = rewardsFor(kid, month);
+  const box = $("rewardRows");
+  box.innerHTML = "";
+  (rows.length ? rows : [{ need: 20, gift: "" }]).forEach(r => addRewardRow(r));
+  render();
+  setTimeout(() => { const f = box.querySelector("input.rwg"); if (f) f.focus(); }, 50);
+}
+function addRewardRow(r) {
+  const box = $("rewardRows");
+  const row = document.createElement("div");
+  row.className = "rwedit";
+  row.dataset.id = r.id || "";
+  row.dataset.paid = r.paidAt || "";
+  row.innerHTML = `
+    <input type="number" class="rwn" min="1" max="200" value="${r.need || 20}" ${r.paidAt ? "disabled" : ""}>
+    <span class="rwunit">개 →</span>
+    <input type="text" class="rwg" maxlength="30" placeholder="예: 레고, 용돈 5000원" ${r.paidAt ? "disabled" : ""}>
+    <button type="button" class="btn small danger rwdel" ${r.paidAt ? "disabled title='이미 지급한 보상'" : ""}>✕</button>`;
+  row.querySelector(".rwg").value = r.gift || "";
+  row.querySelector(".rwdel").addEventListener("click", () => row.remove());
+  box.appendChild(row);
+}
+function saveRewardEditor() {
+  const kid = oneKid(); if (!kid) return;
+  const month = monthOf(nowDate());
+  const old = new Map(rewardsFor(kid, month).map(r => [r.id, r]));
+  const next = [];
+  for (const row of document.querySelectorAll("#rewardRows .rwedit")) {
+    const prev = old.get(row.dataset.id);
+    if (prev && prev.paidAt) { next.push(prev); continue; }         // 지급한 건 그대로
+    const need = Math.max(1, Math.min(200, Number(row.querySelector(".rwn").value) || 0));
+    const gift = row.querySelector(".rwg").value.trim();
+    if (!gift) continue;
+    next.push({ id: prev ? prev.id : "r_" + uid(), kid, month, need, gift, paidAt: null });
+  }
+  sched.rewards = (sched.rewards || []).filter(r => !(r.kid === kid && r.month === month)).concat(next);
+  rewardEditing = false;
+  touchReward(kid, month); render();
+  toast(next.length ? `🎁 ${monthLabel(month)} 보상 ${next.length}단계 저장` : "이번 달 보상을 비웠습니다");
+}
+function copyLastMonthRewards() {
+  const kid = oneKid(); if (!kid) return;
+  const now = nowDate();
+  const last = monthOf(new Date(now.getFullYear(), now.getMonth() - 1, 15));
+  const src = rewardsFor(kid, last);
+  if (!src.length) { toast(`${monthLabel(last)}에 정한 보상이 없습니다`); return; }
+  $("rewardRows").innerHTML = "";
+  src.forEach(r => addRewardRow({ need: r.need, gift: r.gift }));
+  toast(`${monthLabel(last)} 보상을 불러왔습니다. 저장을 누르세요`);
+}
+
 /* ===================== 다른 기기 연결 (QR) =====================
  * 설정(저장소·역할·아이·토큰)을 주소의 # 뒤에 담아 QR 로 보여 줍니다.
  * 아이 폰 카메라로 찍으면 앱이 열리면서 한 번에 설정됩니다.
@@ -660,6 +1223,21 @@ function b64urlDecode(s) {
   while (s.length % 4) s += "=";
   return GH.b64decode(s);
 }
+/**
+ * QR 이 가리킬 주소. "지금 열려 있는 주소"를 쓰면 안 됩니다.
+ * APK 안에서는 https://localhost, PC 미리보기에서는 http://localhost:8080 이라
+ * 다른 폰이 찍으면 자기 자신에게 접속하려다 실패합니다. 항상 GitHub Pages 주소로 만듭니다.
+ */
+function pagesBase() {
+  if (cfg && cfg.pagesUrl) return cfg.pagesUrl.replace(/\/?$/, "/");
+  const owner = String(conn.owner || "").toLowerCase();
+  const repo = String(conn.repo || "");
+  if (!owner || !repo) return location.origin + location.pathname;
+  // 저장소 이름이 "아이디.github.io" 이면 최상위 주소가 됩니다
+  if (repo.toLowerCase() === `${owner}.github.io`) return `https://${owner}.github.io/`;
+  return `https://${owner}.github.io/${repo}/`;
+}
+
 function makeJoinLink(opts) {
   const p = {
     v: 1, o: conn.owner, r: conn.repo, b: conn.branch,
@@ -667,11 +1245,11 @@ function makeJoinLink(opts) {
     sb: conn.statusBranch && conn.statusBranch !== "main" ? conn.statusBranch : undefined,
     role: opts.role, who: opts.who, t: opts.token || undefined
   };
-  const base = location.origin + location.pathname;
-  return `${base}#join=${b64urlEncode(JSON.stringify(p))}`;
+  return `${pagesBase()}#join=${b64urlEncode(JSON.stringify(p))}`;
 }
-function readJoinHash() {
-  const m = (location.hash || "").match(/^#join=([A-Za-z0-9_-]+)$/);
+function readJoinHash(text) {
+  const src = text != null ? String(text) : (location.hash || "");
+  const m = src.match(/#join=([A-Za-z0-9_-]+)/);
   if (!m) return null;
   try {
     const p = JSON.parse(b64urlDecode(m[1]));
@@ -680,11 +1258,11 @@ function readJoinHash() {
   } catch (e) { return null; }
 }
 /** 주소에 연결 정보가 있으면 적용합니다. 적용했으면 true */
-function applyJoinFromHash() {
-  const p = readJoinHash();
+function applyJoinFromHash(pasted) {
+  const p = readJoinHash(pasted);
   if (!p) return false;
   // 읽자마자 주소창·방문 기록에서 지웁니다
-  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { }
+  if (pasted == null) { try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { } }
 
   const roleName = { parent: "부모", child: "아이", viewer: "보기만" }[p.role] || "보기만";
   if (!confirm(`이 기기를 "${roleName}" 기기로 연결할까요?\n저장소: ${p.o}/${p.r}` +
@@ -710,16 +1288,16 @@ function showJoinQR() {
   if (role !== "viewer" && !token) { toast("넘겨줄 토큰이 없습니다. 이 기기에 먼저 넣거나 칸에 붙여넣으세요."); return; }
   if (pasted && !/^(github_pat_|ghp_)[A-Za-z0-9_]+$/.test(pasted)) { toast("토큰 모양이 아닙니다. github_pat_ 로 시작해야 합니다."); return; }
 
-  const link = makeJoinLink({ role, who: kidId, token: role === "viewer" ? "" : token });
+  const link = makeJoinLink({ role, who: role === "parent" ? "all" : kidId, token: role === "viewer" ? "" : token });
   const q = qrcode(0, "M");
   q.addData(link); q.make();
   $("joinQR").innerHTML = q.createSvgTag({ cellSize: 5, margin: 4, scalable: true });
   $("joinQR").dataset.link = link;
   $("joinBox").classList.remove("hidden");
 
-  const k = kidById(kidId);
+  const k = role === "parent" ? null : kidById(kidId);
   $("joinWho").textContent =
-    `${{ parent: "부모", child: "아이", viewer: "보기만" }[role]} 기기` + (k ? ` · ${k.emoji} ${k.name}` : "") +
+    `${{ parent: "부모", child: "아이", viewer: "보기만" }[role]} 기기` + (k ? ` · ${k.emoji} ${k.name}` : role === "parent" ? " · 아이 전체" : "") +
     (role === "viewer" ? " · 토큰 없음" : pasted ? " · 붙여넣은 토큰" : " · 이 기기 토큰");
 
   // 2분 뒤 지웁니다. 화면 사진으로 토큰이 새는 것을 줄이려는 것입니다.
@@ -1700,6 +2278,13 @@ function paintReport(R, label) {
   if (R.sums.pages) hi.push(`✏️ ${R.sums.pages}쪽 풀어냄`);
   if (R.sums.speak) hi.push(`🗣 낭독 ${R.sums.speak}번`);
   if (R.reflects.length) hi.push(`📝 돌아보기 ${R.reflects.length}일 기록`);
+  {
+    const inRange = d => R.days.some(x => x.key === d);
+    const fires = chalOf(who).reduce((a, c) => a + c.stamps.filter(inRange).length, 0);
+    const finished = chalOf(who).filter(c => c.doneAt && inRange(c.doneAt.slice(0, 10))).length;
+    if (fires) hi.push(`🏅 챌린지 도장 ${fires}개`);
+    if (finished) hi.push(`🏆 챌린지 ${finished}개 완주`);
+  }
   const inTime = R.done - R.over;
   if (inTime > 0 && R.over === 0 && R.done >= 3) hi.push(`⏱ 전부 제한시간 안에`);
 
@@ -1745,6 +2330,23 @@ function paintReport(R, label) {
     if (avg != null) h += `<p class="hint" style="margin:12px 0 0">"시작"을 눌러 잰 일정의 평균 소요는 ${avg}분입니다.</p>`;
   }
   h += `</div>`;
+
+  // 월간 리포트: 그 달의 보상
+  if (repMode === "month" && R.days.length) {
+    const m = R.days[0].key.slice(0, 7);
+    const tiers = rewardsFor(who, m);
+    if (tiers.length) {
+      const got = stampsInMonth(who, m);
+      h += `<div class="panel"><h2>🎁 ${monthLabel(m)}의 보상 <span class="cntbadge">도장 ${got}개</span></h2>
+        <table class="rec"><thead><tr><th class="num">목표</th><th>보상</th><th>상태</th></tr></thead><tbody>`;
+      for (const r of tiers) {
+        const st = rewardState(r, got);
+        h += `<tr><td class="num">${r.need}개</td><td>${esc(r.gift)}</td><td>${
+          st === "paid" ? `✓ 지급 ${r.paidAt.slice(5, 10).replace("-", "/")}` : st === "ready" ? "🎉 달성 · 지급 전" : `${r.need - got}개 남음`}</td></tr>`;
+      }
+      h += `</tbody></table></div>`;
+    }
+  }
 
   // 스스로 정한 것 — 자기주도 정도를 보는 핵심 지표
   h += `<div class="panel"><h2>🌱 스스로 정한 것 <span class="cntbadge">${R.own.done}/${R.own.total}</span></h2>`;
@@ -1829,6 +2431,17 @@ function reportText() {
     L.push(` - ${p.title}  ${p.done}/${p.plan}` +
       (a != null ? `  평균 ${a}분 / 제한 ${p.limit}분` : "") +
       (p.over ? `  초과 ${p.over}회` : ""));
+  }
+  if (repMode === "month" && R.days.length) {
+    const m = R.days[0].key.slice(0, 7), tiers = rewardsFor(who, m);
+    if (tiers.length) {
+      const got = stampsInMonth(who, m);
+      L.push("", `[${monthLabel(m)}의 보상 — 도장 ${got}개]`);
+      for (const r of tiers) {
+        const st = rewardState(r, got);
+        L.push(` - ${r.need}개 → ${r.gift}  ${st === "paid" ? "✓ 지급" : st === "ready" ? "🎉 달성(지급 전)" : `${r.need - got}개 남음`}`);
+      }
+    }
   }
   if (R.own.total) {
     L.push("", `[스스로 정한 것 ${R.own.done}/${R.own.total}]`);
@@ -2139,7 +2752,7 @@ function renderKidBar() {
 
 function render() {
   renderKidBar();
-  renderHeader(); renderProgress(); renderToday(); renderOwn(); renderReflect();
+  renderHeader(); renderProgress(); renderToday(); renderOwn(); renderReflect(); renderChallenges(); renderRewards();
   renderWeek(); renderEdit(); renderSettings();
 }
 
@@ -2486,6 +3099,53 @@ function wire() {
     if (formGeo) { formGeo.radius = v; paintFormGeo(); }
   });
 
+  // ---- 이달의 보상 ----
+  $("rewardEdit").addEventListener("click", openRewardEditor);
+  $("rewardAdd").addEventListener("click", () => addRewardRow({ need: 20, gift: "" }));
+  $("rewardCopy").addEventListener("click", copyLastMonthRewards);
+  $("rewardSave").addEventListener("click", saveRewardEditor);
+  $("rewardCancel").addEventListener("click", () => { rewardEditing = false; render(); });
+
+  // ---- 목표 챌린지 ----
+  $("chalNew").addEventListener("click", () => {
+    const f = $("chalForm");
+    f.classList.toggle("hidden");
+    if (!f.classList.contains("hidden")) { paintChalLinks(); paintChalThemes(); $("chalGoal").focus(); }
+  });
+  $("chalForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const kid = oneKid(); if (!kid) return;
+    const goal = $("chalGoal").value.trim();
+    if (!goal) return;
+    const theme = (document.querySelector('#chalTheme input:checked') || {}).value || "star";
+    const emoji = [...($("chalEmoji").value.trim())].slice(0, 2).join("");   // 이모지 하나(합자 대비 2글자까지)
+    if (theme === "emoji" && !emoji) { toast("쓸 이모지를 하나 넣어 주세요"); return; }
+    const c = chalAdd(kid, goal, $("chalGift").value.trim(), Number($("chalSize").value) || 20,
+                      $("chalLink").value || null, theme, emoji);
+    ev.target.reset(); $("chalSize").value = "20";
+    paintChalThemes();
+    $("chalForm").classList.add("hidden");
+    render();
+    toast(`${chalIcon(c)} "${c.goal}" 챌린지 시작! ${c.size}개 모으면 ${c.gift ? "🎁 " + c.gift : "완주"}`);
+  });
+  $("chalCancel").addEventListener("click", () => { $("chalForm").classList.add("hidden"); });
+
+  // ---- 연결 링크 붙여넣기 (APK 등 카메라로 앱이 안 열리는 기기) ----
+  $("joinPaste").addEventListener("click", async () => {
+    let text = $("joinPasteText").value.trim();
+    if (!text) { try { text = await navigator.clipboard.readText(); } catch (e) { } }
+    if (!readJoinHash(text)) { toast("연결 링크가 아닙니다. #join= 이 들어 있어야 합니다."); return; }
+    if (!applyJoinFromHash(text)) return;
+    $("joinPasteText").value = "";
+    buildRepos();
+    await loadSchedule();
+    // 부팅 때와 똑같이 맞춥니다 (부모는 "모두", 아이는 링크에 담긴 아이)
+    who = defaultWho();
+    await loadDay(true); recCache = null;
+    render(); syncNativeAlarms(true);
+    toast("이 기기를 연결했습니다");
+  });
+
   // ---- 다른 기기 연결 ----
   $("joinMake").addEventListener("click", showJoinQR);
   $("joinHide").addEventListener("click", hideJoinQR);
@@ -2704,6 +3364,8 @@ function wire() {
   });
   window.addEventListener("beforeunload", () => {
     if (Object.values(dirtyMap).some(x => x.size) || dirtyMeta.size) flush();
+    flushChallenges();
+    flushRewards();
   });
 }
 
@@ -2715,8 +3377,7 @@ async function boot() {
   if (applyJoinFromHash()) { buildRepos(); setTimeout(() => toast("이 기기를 연결했습니다"), 600); }
   await loadHolidays();
   await loadSchedule();
-  who = (conn.who && kidById(conn.who)) ? conn.who
-      : (conn.role === "parent" && kids().length > 1 ? "all" : (kids()[0] || {}).id || "");
+  who = defaultWho();
   lastDayKey = ymd(nowDate());
   await loadDay(true);
   notifyOn = !!readLS(LS.notify, false) && ("Notification" in window) && Notification.permission === "granted";
@@ -2726,7 +3387,9 @@ async function boot() {
   setInterval(tick, 5000);
   setInterval(() => {
     if (!document.hidden && statusRepo.authed
-        && !Object.values(dirtyMap).some(x => x.size) && !dirtyMeta.size) loadDay(true).then(render);
+        && !Object.values(dirtyMap).some(x => x.size) && !dirtyMeta.size) {
+      (isParent() ? Promise.resolve() : loadSchedule()).then(() => loadDay(true)).then(render);
+    }
   }, 60000);
   try { navigator.serviceWorker?.register("./sw.js", { scope: "./" }).catch(() => { }); } catch (e) { }
 }

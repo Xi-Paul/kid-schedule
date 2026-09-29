@@ -2,12 +2,11 @@
   "owner": "Xi-Paul",
   "repo": "kid-schedule",
   "branch": "main",
-
+  "pagesUrl": null,
   "statusOwner": null,
   "statusRepo": null,
   "statusBranch": "main",
   "statusDir": "status",
-
   "check": {
     "beforeMin": 10,
     "afterMin": 30

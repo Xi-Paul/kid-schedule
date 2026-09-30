@@ -28,11 +28,19 @@
         "speak": true,
         "book": "배런 trouble at school"
       }
+    },
+    "taekwon2": {
+      "state": "running",
+      "startedAt": "2026-09-30T10:12:21.616Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 160,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T08:23:19.698Z",
+  "updatedAt": "2026-09-30T10:12:24.666Z",
   "own": {},
   "reflect": {
     "rating": 0

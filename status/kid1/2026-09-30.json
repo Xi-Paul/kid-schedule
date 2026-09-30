@@ -8,11 +8,19 @@
       "elapsedMin": 70,
       "limitMin": 50,
       "by": "parent"
+    },
+    "a1mh9yf": {
+      "state": "running",
+      "startedAt": "2026-09-30T05:51:29.599Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 120,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T05:36:55.895Z",
+  "updatedAt": "2026-09-30T05:51:32.634Z",
   "own": {},
   "reflect": {
     "rating": 0

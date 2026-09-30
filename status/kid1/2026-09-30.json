@@ -2,15 +2,15 @@
   "date": "2026-09-30",
   "items": {
     "uag65nt": {
-      "state": "running",
+      "state": "over",
       "startedAt": "2026-09-29T22:56:23.326Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-30T00:06:27.984Z",
+      "elapsedMin": 70,
       "limitMin": 50,
-      "by": "child"
+      "by": "parent"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-29T22:56:29.164Z"
+  "updatedAt": "2026-09-30T00:06:30.959Z"
 }

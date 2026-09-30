@@ -10,17 +10,17 @@
       "by": "parent"
     },
     "a1mh9yf": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-09-30T05:51:29.599Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-30T08:02:40.200Z",
+      "elapsedMin": 131,
       "limitMin": 120,
       "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T05:51:32.634Z",
+  "updatedAt": "2026-09-30T08:02:43.404Z",
   "own": {},
   "reflect": {
     "rating": 0

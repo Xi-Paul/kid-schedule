@@ -16,11 +16,20 @@
       "elapsedMin": 131,
       "limitMin": 120,
       "by": "child"
+    },
+    "eng3": {
+      "state": "running",
+      "startedAt": "2026-09-30T08:22:24.702Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 30,
+      "by": "child",
+      "detail": {}
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T08:02:43.404Z",
+  "updatedAt": "2026-09-30T08:22:27.869Z",
   "own": {},
   "reflect": {
     "rating": 0

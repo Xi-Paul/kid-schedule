@@ -1,19 +1,20 @@
 {
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T09:24:40.327Z",
+  "updatedAt": "2026-09-30T12:00:42.665Z",
   "items": [
     {
       "id": "c_t4zh3dm",
       "goal": "할일을 다해보자",
       "gift": "인형 뽑기",
       "size": 20,
-      "theme": "clover",
+      "theme": "star",
       "start": "2026-09-29",
       "link": "__all__",
       "stamps": [],
       "doneAt": null,
-      "createdAt": "2026-09-29T05:45:08.317Z"
+      "createdAt": "2026-09-29T05:45:08.317Z",
+      "autoDays": []
     }
   ]
 }

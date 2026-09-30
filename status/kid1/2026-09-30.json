@@ -25,13 +25,14 @@
       "limitMin": 30,
       "by": "child",
       "detail": {
-        "speak": true
+        "speak": true,
+        "book": "배런 tr"
       }
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T08:22:40.438Z",
+  "updatedAt": "2026-09-30T08:22:55.933Z",
   "own": {},
   "reflect": {
     "rating": 0

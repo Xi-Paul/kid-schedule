@@ -36,11 +36,20 @@
       "elapsedMin": 108,
       "limitMin": 160,
       "by": "child"
+    },
+    "72pj9eh": {
+      "state": "running",
+      "startedAt": "2026-09-30T12:45:48.662Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 60,
+      "by": "child",
+      "detail": {}
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T11:59:56.746Z",
+  "updatedAt": "2026-09-30T12:45:51.748Z",
   "own": {},
   "reflect": {
     "rating": 0

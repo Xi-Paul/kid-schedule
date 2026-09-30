@@ -2,17 +2,18 @@
   "date": "2026-10-01",
   "items": {
     "f5nc1m8": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-09-30T23:04:11.382Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-30T23:39:31.527Z",
+      "elapsedMin": 35,
       "limitMin": 50,
-      "by": "child"
+      "by": "child",
+      "pausedMin": 0
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T23:04:26.236Z",
+  "updatedAt": "2026-09-30T23:39:34.654Z",
   "own": {},
   "reflect": {},
   "goal": {

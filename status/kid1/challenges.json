@@ -1,7 +1,7 @@
 {
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T12:00:52.266Z",
+  "updatedAt": "2026-09-30T12:46:16.113Z",
   "items": [
     {
       "id": "c_t4zh3dm",
@@ -11,10 +11,14 @@
       "theme": "clover",
       "start": "2026-09-29",
       "link": "__all__",
-      "stamps": [],
+      "stamps": [
+        "2026-09-30"
+      ],
       "doneAt": null,
       "createdAt": "2026-09-29T05:45:08.317Z",
-      "autoDays": []
+      "autoDays": [
+        "2026-09-30"
+      ]
     }
   ]
 }

@@ -38,21 +38,22 @@
       "by": "child"
     },
     "72pj9eh": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-09-30T12:45:48.662Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-30T12:46:13.351Z",
+      "elapsedMin": 0,
       "limitMin": 60,
       "by": "child",
       "detail": {
         "speak": false,
-        "listen": true
+        "listen": true,
+        "book": "The Zack files"
       }
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T12:45:57.168Z",
+  "updatedAt": "2026-09-30T12:46:18.571Z",
   "own": {},
   "reflect": {
     "rating": 0

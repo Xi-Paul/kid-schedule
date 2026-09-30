@@ -44,12 +44,15 @@
       "elapsedMin": null,
       "limitMin": 60,
       "by": "child",
-      "detail": {}
+      "detail": {
+        "speak": false,
+        "listen": true
+      }
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T12:45:51.748Z",
+  "updatedAt": "2026-09-30T12:45:57.168Z",
   "own": {},
   "reflect": {
     "rating": 0

@@ -30,17 +30,17 @@
       }
     },
     "taekwon2": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-09-30T10:12:21.616Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-30T11:59:53.623Z",
+      "elapsedMin": 108,
       "limitMin": 160,
       "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T10:12:26.105Z",
+  "updatedAt": "2026-09-30T11:59:56.746Z",
   "own": {},
   "reflect": {
     "rating": 0

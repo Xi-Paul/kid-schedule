@@ -18,21 +18,21 @@
       "by": "child"
     },
     "eng3": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-09-30T08:22:24.702Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-09-30T08:23:16.564Z",
+      "elapsedMin": 1,
       "limitMin": 30,
       "by": "child",
       "detail": {
         "speak": true,
-        "book": "배런 tr"
+        "book": "배런 trouble at school"
       }
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T08:22:55.933Z",
+  "updatedAt": "2026-09-30T08:23:19.698Z",
   "own": {},
   "reflect": {
     "rating": 0

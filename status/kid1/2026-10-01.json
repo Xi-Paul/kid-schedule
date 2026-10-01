@@ -39,12 +39,15 @@
       "elapsedMin": null,
       "limitMin": 60,
       "by": "child",
-      "detail": {}
+      "detail": {
+        "speak": false,
+        "listen": true
+      }
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T06:49:21.009Z",
+  "updatedAt": "2026-10-01T06:49:31.865Z",
   "own": {},
   "reflect": {},
   "goal": {

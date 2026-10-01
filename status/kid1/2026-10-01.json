@@ -56,22 +56,23 @@
       "pausedMin": 0
     },
     "1qsxpun": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-01T10:03:22.932Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-01T12:15:43.721Z",
+      "elapsedMin": 132,
       "limitMin": 160,
-      "by": "child"
+      "by": "child",
+      "pausedMin": 0
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T10:03:24.721Z",
+  "updatedAt": "2026-10-01T12:15:47.075Z",
   "own": {},
   "reflect": {},
   "goal": {
     "text": "오늘 계획 7개 다 하기",
     "setAt": "2026-09-30T23:04:23.149Z",
-    "kept": null
+    "kept": true
   }
 }

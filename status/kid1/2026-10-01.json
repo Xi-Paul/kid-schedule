@@ -9,11 +9,21 @@
       "limitMin": 50,
       "by": "child",
       "pausedMin": 0
+    },
+    "ci0jdfp": {
+      "state": "done",
+      "startedAt": null,
+      "doneAt": "2026-10-01T05:28:22.911Z",
+      "elapsedMin": null,
+      "pausedMin": 0,
+      "limitMin": 70,
+      "by": "child",
+      "detail": {}
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-09-30T23:39:34.654Z",
+  "updatedAt": "2026-10-01T05:28:26.040Z",
   "own": {},
   "reflect": {},
   "goal": {

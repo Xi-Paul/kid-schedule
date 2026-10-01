@@ -47,17 +47,18 @@
       "pausedMin": 0
     },
     "bu16ocv": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-01T09:10:38.200Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-01T09:33:05.347Z",
+      "elapsedMin": 22,
       "limitMin": 50,
-      "by": "child"
+      "by": "parent",
+      "pausedMin": 0
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T09:10:41.293Z",
+  "updatedAt": "2026-10-01T09:33:08.376Z",
   "own": {},
   "reflect": {},
   "goal": {

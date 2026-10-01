@@ -19,11 +19,20 @@
       "limitMin": 70,
       "by": "child",
       "detail": {}
+    },
+    "a891mr3": {
+      "state": "running",
+      "startedAt": "2026-10-01T05:28:45.431Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 90,
+      "by": "child",
+      "detail": {}
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T05:28:26.040Z",
+  "updatedAt": "2026-10-01T05:28:48.560Z",
   "own": {},
   "reflect": {},
   "goal": {

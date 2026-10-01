@@ -45,11 +45,19 @@
         "book": "매직 트리하우스"
       },
       "pausedMin": 0
+    },
+    "bu16ocv": {
+      "state": "running",
+      "startedAt": "2026-10-01T09:10:38.200Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 50,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T06:49:52.543Z",
+  "updatedAt": "2026-10-01T09:10:41.293Z",
   "own": {},
   "reflect": {},
   "goal": {

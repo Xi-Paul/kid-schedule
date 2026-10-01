@@ -21,20 +21,21 @@
       "detail": {}
     },
     "a891mr3": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-01T05:28:45.431Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-01T05:29:01.816Z",
+      "elapsedMin": 0,
       "limitMin": 90,
       "by": "child",
       "detail": {
         "speak": true
-      }
+      },
+      "pausedMin": 0
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T05:28:51.634Z",
+  "updatedAt": "2026-10-01T05:29:05.044Z",
   "own": {},
   "reflect": {},
   "goal": {

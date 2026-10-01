@@ -313,8 +313,8 @@
     },
     {
       "id": "ci0jdfp",
-      "start": "15:00",
-      "end": "15:40",
+      "start": "15:50",
+      "end": "17:00",
       "limitMin": null,
       "title": "수학 숙제",
       "kind": "study",
@@ -401,26 +401,6 @@
         "speak"
       ],
       "day": 2,
-      "off": []
-    },
-    {
-      "id": "eng4",
-      "start": "15:50",
-      "end": "16:20",
-      "limitMin": null,
-      "title": "영어 (아이보람)",
-      "kind": "study",
-      "place": "",
-      "track": true,
-      "onHoliday": "skip",
-      "geo": null,
-      "kid": "kid1",
-      "detail": [
-        "book",
-        "listen",
-        "speak"
-      ],
-      "day": 4,
       "off": []
     },
     {

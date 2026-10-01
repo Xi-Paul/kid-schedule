@@ -33,21 +33,23 @@
       "pausedMin": 0
     },
     "w44mpcf": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-01T06:49:17.861Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-01T06:49:49.355Z",
+      "elapsedMin": 1,
       "limitMin": 60,
       "by": "child",
       "detail": {
         "speak": false,
-        "listen": true
-      }
+        "listen": true,
+        "book": "매직 트리하우스"
+      },
+      "pausedMin": 0
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-01T06:49:31.865Z",
+  "updatedAt": "2026-10-01T06:49:52.543Z",
   "own": {},
   "reflect": {},
   "goal": {

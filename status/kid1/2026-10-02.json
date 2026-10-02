@@ -42,6 +42,14 @@
       "limitMin": 60,
       "by": "child",
       "detail": {}
+    },
+    "v9b34m1": {
+      "state": "running",
+      "startedAt": "2026-10-02T09:58:38.738Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 160,
+      "by": "child"
     }
   },
   "own": {},
@@ -53,5 +61,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T09:52:01.571Z"
+  "updatedAt": "2026-10-02T09:58:41.761Z"
 }

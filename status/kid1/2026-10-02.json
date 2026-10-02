@@ -10,21 +10,6 @@
       "by": "child",
       "pausedMin": 0
     },
-    "z5iwchl": {
-      "state": "done",
-      "startedAt": "2026-10-02T05:06:37.235Z",
-      "doneAt": "2026-10-02T05:07:01.019Z",
-      "elapsedMin": 0,
-      "limitMin": 40,
-      "by": "child",
-      "detail": {
-        "pages": [
-          27,
-          31
-        ]
-      },
-      "pausedMin": 0
-    },
     "v2e68je": {
       "state": "over",
       "startedAt": "2026-10-02T08:13:12.111Z",
@@ -44,5 +29,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T12:28:56.505Z"
+  "updatedAt": "2026-10-02T12:30:06.859Z"
 }

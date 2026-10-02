@@ -26,7 +26,9 @@
       "elapsedMin": null,
       "limitMin": 60,
       "by": "child",
-      "detail": {}
+      "detail": {
+        "listen": true
+      }
     },
     "v9b34m1": {
       "state": "done",
@@ -47,5 +49,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T12:30:24.394Z"
+  "updatedAt": "2026-10-02T12:30:34.597Z"
 }

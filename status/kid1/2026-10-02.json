@@ -1,15 +1,6 @@
 {
   "date": "2026-10-02",
   "items": {
-    "5hnwv18": {
-      "state": "over",
-      "startedAt": "2026-10-01T23:26:19.096Z",
-      "doneAt": "2026-10-02T02:49:17.953Z",
-      "elapsedMin": 203,
-      "limitMin": 50,
-      "by": "child",
-      "pausedMin": 0
-    },
     "v2e68je": {
       "state": "over",
       "startedAt": "2026-10-02T08:13:12.111Z",
@@ -50,5 +41,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T12:30:48.204Z"
+  "updatedAt": "2026-10-02T12:30:51.831Z"
 }

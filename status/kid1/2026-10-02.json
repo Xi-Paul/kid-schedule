@@ -44,12 +44,13 @@
       "detail": {}
     },
     "v9b34m1": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-02T09:58:38.738Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-02T09:58:43.909Z",
+      "elapsedMin": 0,
       "limitMin": 160,
-      "by": "child"
+      "by": "child",
+      "pausedMin": 0
     }
   },
   "own": {},
@@ -61,5 +62,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T09:58:41.761Z"
+  "updatedAt": "2026-10-02T09:58:46.937Z"
 }

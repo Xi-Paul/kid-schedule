@@ -27,7 +27,8 @@
       "limitMin": 60,
       "by": "child",
       "detail": {
-        "listen": true
+        "listen": true,
+        "book": "The bear"
       }
     },
     "v9b34m1": {
@@ -49,5 +50,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T12:30:34.597Z"
+  "updatedAt": "2026-10-02T12:30:48.204Z"
 }

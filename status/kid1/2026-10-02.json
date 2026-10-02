@@ -11,18 +11,19 @@
       "pausedMin": 0
     },
     "z5iwchl": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-02T05:06:37.235Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-02T05:07:01.019Z",
+      "elapsedMin": 0,
       "limitMin": 40,
       "by": "child",
       "detail": {
         "pages": [
           27,
-          null
+          31
         ]
-      }
+      },
+      "pausedMin": 0
     }
   },
   "own": {},
@@ -34,5 +35,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T05:06:52.506Z"
+  "updatedAt": "2026-10-02T05:07:04.081Z"
 }

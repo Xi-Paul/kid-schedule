@@ -33,6 +33,15 @@
       "limitMin": 50,
       "by": "child",
       "pausedMin": 0
+    },
+    "f6svf6z": {
+      "state": "running",
+      "startedAt": "2026-10-02T09:51:58.409Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 60,
+      "by": "child",
+      "detail": {}
     }
   },
   "own": {},
@@ -44,5 +53,5 @@
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-02T09:51:44.527Z"
+  "updatedAt": "2026-10-02T09:52:01.571Z"
 }

@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-06",
+  "items": {
+    "wo800p8": {
+      "state": "running",
+      "startedAt": "2026-10-05T23:03:25.745Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 50,
+      "by": "child"
+    }
+  },
+  "kid": "kid1",
+  "name": "시윤",
+  "updatedAt": "2026-10-05T23:03:28.831Z"
+}

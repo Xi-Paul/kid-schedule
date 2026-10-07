@@ -22,13 +22,15 @@
       "manual": false
     },
     "eng3": {
-      "state": "running",
+      "state": "over",
       "startedAt": "2026-10-07T09:49:30.268Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-07T12:00:39.276Z",
+      "elapsedMin": 131,
       "limitMin": 30,
       "by": "child",
-      "detail": {}
+      "detail": {},
+      "pausedMin": 0,
+      "manual": false
     },
     "taekwon2": {
       "state": "done",
@@ -48,5 +50,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T12:00:31.846Z"
+  "updatedAt": "2026-10-07T12:00:42.807Z"
 }

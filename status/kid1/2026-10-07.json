@@ -50,7 +50,8 @@
       "limitMin": 60,
       "by": "child",
       "detail": {
-        "listen": true
+        "listen": true,
+        "book": "잭파일"
       }
     }
   },
@@ -61,5 +62,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T13:28:31.706Z"
+  "updatedAt": "2026-10-07T13:28:40.618Z"
 }

@@ -43,16 +43,18 @@
       "manual": false
     },
     "72pj9eh": {
-      "state": "running",
+      "state": "over",
       "startedAt": "2026-10-07T13:28:24.604Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-07T14:41:02.367Z",
+      "elapsedMin": 73,
       "limitMin": 60,
       "by": "child",
       "detail": {
         "listen": true,
         "book": "잭파일"
-      }
+      },
+      "pausedMin": 0,
+      "manual": false
     }
   },
   "own": {},
@@ -62,5 +64,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T13:28:40.618Z"
+  "updatedAt": "2026-10-07T14:41:05.350Z"
 }

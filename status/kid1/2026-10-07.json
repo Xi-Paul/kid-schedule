@@ -10,6 +10,14 @@
       "by": "child",
       "pausedMin": 0,
       "manual": false
+    },
+    "a1mh9yf": {
+      "state": "running",
+      "startedAt": "2026-10-07T05:47:52.332Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 120,
+      "by": "child"
     }
   },
   "own": {},
@@ -19,5 +27,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T05:37:27.933Z"
+  "updatedAt": "2026-10-07T05:47:54.380Z"
 }

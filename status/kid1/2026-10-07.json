@@ -49,7 +49,9 @@
       "elapsedMin": null,
       "limitMin": 60,
       "by": "child",
-      "detail": {}
+      "detail": {
+        "listen": true
+      }
     }
   },
   "own": {},
@@ -59,5 +61,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T13:28:27.715Z"
+  "updatedAt": "2026-10-07T13:28:31.706Z"
 }

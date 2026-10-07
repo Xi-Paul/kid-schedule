@@ -20,6 +20,15 @@
       "by": "child",
       "pausedMin": 0,
       "manual": false
+    },
+    "eng3": {
+      "state": "running",
+      "startedAt": "2026-10-07T09:49:30.268Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 30,
+      "by": "child",
+      "detail": {}
     }
   },
   "own": {},
@@ -29,5 +38,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T08:03:03.706Z"
+  "updatedAt": "2026-10-07T09:49:33.344Z"
 }

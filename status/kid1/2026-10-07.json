@@ -29,6 +29,14 @@
       "limitMin": 30,
       "by": "child",
       "detail": {}
+    },
+    "taekwon2": {
+      "state": "running",
+      "startedAt": "2026-10-07T09:56:47.289Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 160,
+      "by": "child"
     }
   },
   "own": {},
@@ -38,5 +46,5 @@
   "goal": null,
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T09:49:36.255Z"
+  "updatedAt": "2026-10-07T09:56:49.894Z"
 }

@@ -32,11 +32,21 @@
       "pausedMin": 0,
       "limitMin": 90,
       "by": "child"
+    },
+    "1qsxpun": {
+      "state": "done",
+      "startedAt": "2026-10-08T09:50:00.000Z",
+      "manual": true,
+      "doneAt": "2026-10-08T12:16:05.190Z",
+      "elapsedMin": 146,
+      "pausedMin": 0,
+      "limitMin": 160,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-08T06:12:11.432Z",
+  "updatedAt": "2026-10-08T12:16:08.238Z",
   "own": {},
   "reflect": {},
   "goal": {

@@ -10,11 +10,22 @@
       "by": "child",
       "pausedMin": 0,
       "manual": false
+    },
+    "ci0jdfp": {
+      "state": "done",
+      "startedAt": "2026-10-08T05:41:43.256Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-08T06:11:43.274Z",
+      "elapsedMin": 30,
+      "pausedMin": 0,
+      "limitMin": 70,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-07T23:32:48.950Z",
+  "updatedAt": "2026-10-08T06:11:48.593Z",
   "own": {},
   "reflect": {},
   "goal": {

@@ -21,11 +21,22 @@
       "pausedMin": 0,
       "limitMin": 70,
       "by": "child"
+    },
+    "a891mr3": {
+      "state": "over",
+      "startedAt": "2026-10-08T04:42:08.031Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-08T06:12:08.048Z",
+      "elapsedMin": 90,
+      "pausedMin": 0,
+      "limitMin": 90,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-08T06:11:48.593Z",
+  "updatedAt": "2026-10-08T06:12:11.432Z",
   "own": {},
   "reflect": {},
   "goal": {

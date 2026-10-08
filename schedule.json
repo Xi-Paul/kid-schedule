@@ -424,54 +424,6 @@
       "off": []
     },
     {
-      "id": "ryqgf0p",
-      "start": "17:00",
-      "end": "17:50",
-      "limitMin": null,
-      "title": "화상영어",
-      "kind": "study",
-      "place": "",
-      "track": true,
-      "onHoliday": "skip",
-      "geo": null,
-      "kid": "kid1",
-      "detail": [],
-      "day": 2,
-      "off": []
-    },
-    {
-      "id": "bu16ocv",
-      "start": "17:00",
-      "end": "17:50",
-      "limitMin": null,
-      "title": "화상영어",
-      "kind": "study",
-      "place": "",
-      "track": true,
-      "onHoliday": "skip",
-      "geo": null,
-      "kid": "kid1",
-      "detail": [],
-      "day": 4,
-      "off": []
-    },
-    {
-      "id": "v2e68je",
-      "start": "17:00",
-      "end": "17:50",
-      "limitMin": null,
-      "title": "화상영어",
-      "kind": "study",
-      "place": "",
-      "track": true,
-      "onHoliday": "skip",
-      "geo": null,
-      "kid": "kid1",
-      "detail": [],
-      "day": 5,
-      "off": []
-    },
-    {
       "id": "gkgi72q",
       "start": "18:00",
       "end": "18:30",
@@ -750,8 +702,6 @@
     },
     {
       "id": "a891mr3",
-      "kid": "kid1",
-      "day": 4,
       "start": "14:00",
       "end": "15:30",
       "limitMin": null,
@@ -761,10 +711,12 @@
       "track": true,
       "onHoliday": "skip",
       "geo": null,
+      "kid": "kid1",
       "detail": [
         "listen",
         "speak"
       ],
+      "day": 4,
       "off": []
     }
   ],

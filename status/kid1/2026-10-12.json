@@ -2,15 +2,17 @@
   "date": "2026-10-12",
   "items": {
     "922ztyh": {
-      "state": "running",
+      "state": "over",
       "startedAt": "2026-10-11T22:59:15.135Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-12T08:04:44.680Z",
+      "elapsedMin": 545,
       "limitMin": 50,
-      "by": "child"
+      "by": "child",
+      "pausedMin": 0,
+      "manual": false
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-11T22:59:21.722Z"
+  "updatedAt": "2026-10-12T08:04:47.751Z"
 }

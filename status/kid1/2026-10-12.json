@@ -10,9 +10,19 @@
       "by": "child",
       "pausedMin": 0,
       "manual": false
+    },
+    "0vajw4t": {
+      "state": "done",
+      "startedAt": "2026-10-12T06:00:00.000Z",
+      "manual": true,
+      "doneAt": "2026-10-12T08:00:00.000Z",
+      "elapsedMin": 120,
+      "pausedMin": 0,
+      "limitMin": 120,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-12T08:04:47.751Z"
+  "updatedAt": "2026-10-12T08:04:53.357Z"
 }

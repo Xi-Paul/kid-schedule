@@ -20,9 +20,17 @@
       "pausedMin": 0,
       "limitMin": 120,
       "by": "child"
+    },
+    "taekwon": {
+      "state": "running",
+      "startedAt": "2026-10-12T09:53:52.152Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 160,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-12T08:04:53.357Z"
+  "updatedAt": "2026-10-12T09:53:54.661Z"
 }

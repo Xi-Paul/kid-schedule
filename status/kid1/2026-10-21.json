@@ -11,9 +11,20 @@
       "pausedMin": 0,
       "limitMin": 30,
       "by": "child"
+    },
+    "72pj9eh": {
+      "state": "done",
+      "startedAt": "2026-10-20T15:00:25.259Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-20T15:30:25.274Z",
+      "elapsedMin": 30,
+      "pausedMin": 0,
+      "limitMin": 60,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-20T15:30:25.312Z"
+  "updatedAt": "2026-10-20T15:30:29.318Z"
 }

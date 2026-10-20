@@ -24,15 +24,17 @@
       "by": "child"
     },
     "uag65nt": {
-      "state": "running",
+      "state": "done",
       "startedAt": "2026-10-20T21:55:33.594Z",
-      "doneAt": null,
-      "elapsedMin": null,
+      "doneAt": "2026-10-20T22:42:11.696Z",
+      "elapsedMin": 47,
       "limitMin": 50,
-      "by": "child"
+      "by": "child",
+      "pausedMin": 0,
+      "manual": false
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-20T21:55:35.546Z"
+  "updatedAt": "2026-10-20T22:42:14.906Z"
 }

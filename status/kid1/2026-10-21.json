@@ -22,9 +22,17 @@
       "pausedMin": 0,
       "limitMin": 60,
       "by": "child"
+    },
+    "uag65nt": {
+      "state": "running",
+      "startedAt": "2026-10-20T21:55:33.594Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 50,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-20T15:30:29.318Z"
+  "updatedAt": "2026-10-20T21:55:35.546Z"
 }

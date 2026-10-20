@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-21",
+  "items": {
+    "eng3": {
+      "state": "over",
+      "startedAt": "2026-10-20T15:00:22.291Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-20T15:30:22.312Z",
+      "elapsedMin": 30,
+      "pausedMin": 0,
+      "limitMin": 30,
+      "by": "child"
+    }
+  },
+  "kid": "kid1",
+  "name": "시윤",
+  "updatedAt": "2026-10-20T15:30:25.312Z"
+}

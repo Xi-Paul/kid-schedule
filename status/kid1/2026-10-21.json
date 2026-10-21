@@ -32,9 +32,19 @@
       "by": "child",
       "pausedMin": 0,
       "manual": false
+    },
+    "a1mh9yf": {
+      "state": "done",
+      "startedAt": "2026-10-21T06:00:00.000Z",
+      "manual": true,
+      "doneAt": "2026-10-21T08:00:00.000Z",
+      "elapsedMin": 120,
+      "pausedMin": 0,
+      "limitMin": 120,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-20T22:42:14.906Z"
+  "updatedAt": "2026-10-21T08:15:00.699Z"
 }

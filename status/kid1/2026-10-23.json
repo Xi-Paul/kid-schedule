@@ -10,9 +10,20 @@
       "by": "child",
       "pausedMin": 0,
       "manual": false
+    },
+    "f6svf6z": {
+      "state": "over",
+      "startedAt": "2026-10-22T22:27:52.542Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-22T23:27:52.562Z",
+      "elapsedMin": 60,
+      "pausedMin": 0,
+      "limitMin": 60,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-22T23:27:43.724Z"
+  "updatedAt": "2026-10-22T23:27:55.726Z"
 }

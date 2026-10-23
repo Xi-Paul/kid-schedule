@@ -21,9 +21,20 @@
       "pausedMin": 0,
       "limitMin": 60,
       "by": "child"
+    },
+    "read1_5": {
+      "state": "over",
+      "startedAt": "2026-10-23T07:33:17.713Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-23T08:03:17.740Z",
+      "elapsedMin": 30,
+      "pausedMin": 0,
+      "limitMin": 30,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-22T23:27:55.726Z"
+  "updatedAt": "2026-10-23T08:03:20.880Z"
 }

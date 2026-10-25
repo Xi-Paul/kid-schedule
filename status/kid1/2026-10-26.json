@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-26",
+  "items": {
+    "922ztyh": {
+      "state": "running",
+      "startedAt": "2026-10-25T23:03:24.494Z",
+      "doneAt": null,
+      "elapsedMin": null,
+      "limitMin": 50,
+      "by": "child"
+    }
+  },
+  "kid": "kid1",
+  "name": "시윤",
+  "updatedAt": "2026-10-25T23:03:27.534Z"
+}

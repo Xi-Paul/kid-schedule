@@ -8,9 +8,20 @@
       "elapsedMin": null,
       "limitMin": 50,
       "by": "child"
+    },
+    "3zjdclk": {
+      "state": "over",
+      "startedAt": "2026-10-26T22:03:08.958Z",
+      "manual": true,
+      "detail": {},
+      "doneAt": "2026-10-26T23:03:08.979Z",
+      "elapsedMin": 60,
+      "pausedMin": 0,
+      "limitMin": 60,
+      "by": "child"
     }
   },
   "kid": "kid1",
   "name": "시윤",
-  "updatedAt": "2026-10-26T23:03:02.365Z"
+  "updatedAt": "2026-10-26T23:03:12.095Z"
 }
